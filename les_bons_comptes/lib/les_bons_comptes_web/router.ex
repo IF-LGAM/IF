@@ -32,6 +32,14 @@ defmodule LesBonsComptesWeb.Router do
       live "/sign-in", SignInLive
       live "/sign-up", SignUpLive
     end
+
+    live_session :authenticated_user,
+      on_mount: [{LesBonsComptesWeb.UserAuth, :ensure_authenticated}] do
+      live "/wallets", WalletLive.Index, :index
+      live "/wallets/new", WalletLive.New, :new
+      live "/wallets/:id", WalletLive.Show, :show
+      live "/wallets/:id/edit", WalletLive.Edit, :edit
+    end
   end
 
   # Other scopes may use custom stacks.
