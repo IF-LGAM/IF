@@ -7,16 +7,12 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    wallet = Wallets.get_wallet!(id)
-    total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
-    expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+    data = load_wallet_data(id)
 
     {:ok,
      socket
-     |> assign(:page_title, "#{wallet.name} - Les Bons Comptes")
-     |> assign(:wallet, wallet)
-     |> assign(:total_expenses, total_expenses)
-     |> assign(:expenses_by_member, expenses_by_member)}
+     |> assign(:page_title, "#{data.wallet.name} - Les Bons Comptes")
+     |> assign(data)}
   end
 
   @impl true
@@ -73,15 +69,9 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
     case Expenses.delete_expense(current_user, expense_id) do
       {:ok, deleted_expense} ->
-        updated_wallet = Wallets.get_wallet!(wallet.id)
-        total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
-        expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
-
         {:noreply,
          socket
-         |> assign(:wallet, updated_wallet)
-         |> assign(:total_expenses, total_expenses)
-         |> assign(:expenses_by_member, expenses_by_member)
+         |> assign(load_wallet_data(wallet.id))
          |> put_flash(
            :info,
            "La dépense « #{deleted_expense.title} » a été supprimée avec succès."
@@ -97,6 +87,18 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
          socket
          |> put_flash(:error, "Impossible de supprimer cette dépense.")}
     end
+  end
+
+  defp load_wallet_data(wallet_id) do
+    wallet = Wallets.get_wallet!(wallet_id)
+    total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
+    expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+
+    %{
+      wallet: wallet,
+      total_expenses: total_expenses,
+      expenses_by_member: expenses_by_member
+    }
   end
 
   @impl true
