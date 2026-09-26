@@ -15,6 +15,10 @@ defmodule LesBonsComptes.Wallets.WalletMember do
     belongs_to :wallet, LesBonsComptes.Wallets.Wallet
     belongs_to :user, LesBonsComptes.Accounts.User
 
+    has_many :expenses, LesBonsComptes.Expenses.Expense,
+      foreign_key: :payer_id,
+      on_delete: :delete_all
+
     timestamps()
   end
 

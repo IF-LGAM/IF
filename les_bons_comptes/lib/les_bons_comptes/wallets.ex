@@ -67,6 +67,11 @@ defmodule LesBonsComptes.Wallets do
           where: i.status in ["pending", "declined"],
           order_by: [desc: i.inserted_at],
           preload: [:invitee, :inviter]
+        ),
+      expenses:
+        from(e in LesBonsComptes.Expenses.Expense,
+          order_by: [desc: e.date, desc: e.inserted_at],
+          preload: [:payer, :created_by]
         )
     ])
   end
