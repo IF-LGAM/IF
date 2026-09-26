@@ -37,8 +37,21 @@ defmodule LesBonsComptes.Wallets.Wallet do
     |> foreign_key_constraint(:creator_id)
   end
 
+  @currency_options [
+    {"Euro (€)", "EUR"},
+    {"Dollar américain ($)", "USD"},
+    {"Livre sterling (£)", "GBP"},
+    {"Franc suisse (CHF)", "CHF"},
+    {"Dollar canadien ($)", "CAD"}
+  ]
+
   @doc """
   Retourne la liste des devises supportées.
   """
   def supported_currencies, do: @currencies
+
+  @doc """
+  Retourne les options de devise formatées pour les select HTML.
+  """
+  def currency_options, do: @currency_options
 end

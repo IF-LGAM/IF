@@ -1,6 +1,7 @@
 defmodule LesBonsComptesWeb.WalletLive.Show do
   use LesBonsComptesWeb, :live_view
 
+  import LesBonsComptesWeb.WalletLive.WalletComponents
   alias LesBonsComptes.Wallets
 
   @impl true
@@ -200,27 +201,15 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               <%= for member <- @wallet.members do %>
                 <div id={"member-item-#{member.id}"} class="py-3 flex items-center justify-between">
                   <div class="flex items-center gap-3">
-                    <div class={[
-                      "size-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm",
-                      if(member.role == "owner",
-                        do: "bg-primary text-primary-content",
-                        else: "bg-base-300 text-base-content"
-                      )
-                    ]}>
-                      {String.first(member.name || "?")}
-                    </div>
+                    <.member_avatar
+                      name={member.name}
+                      is_owner={member.role == "owner"}
+                      size="size-10"
+                    />
                     <div>
                       <div class="font-semibold text-sm text-base-content flex items-center gap-2">
                         <span>{member.name}</span>
-                        <%= if member.role == "owner" do %>
-                          <span class="badge badge-primary badge-xs gap-1">
-                            <.icon name="hero-star" class="size-2.5" /> Propriétaire
-                          </span>
-                        <% else %>
-                          <span class="badge badge-info badge-xs gap-0.5">
-                            <.icon name="hero-check" class="size-2.5" /> Inscrit
-                          </span>
-                        <% end %>
+                        <.member_badge role={member.role} />
                       </div>
                       <div :if={member.email} class="text-xs text-base-content/60">
                         {member.email}

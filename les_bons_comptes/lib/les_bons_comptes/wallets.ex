@@ -235,6 +235,43 @@ defmodule LesBonsComptes.Wallets do
   def owner?(_, _), do: false
 
   @doc """
+  Valide l'ajout d'un nouveau participant par email pour un créateur ou propriétaire donné.
+  Vérifie que l'email est présent, valide, n'appartient pas au propriétaire,
+  n'est pas déjà dans la liste des participants, et correspond à un compte inscrit.
+  Retourne `{:ok, user}` ou `{:error, message}`.
+  """
+  def validate_new_participant(existing_participants, %User{} = current_user, email) do
+    email = String.trim(to_string(email || ""))
+
+    cond do
+      email == "" ->
+        {:error, "L'adresse email est obligatoire."}
+
+      not (email =~ ~r/^[^\s]+@[^\s]+\.[^\s]+$/) ->
+        {:error, "Veuillez saisir une adresse email valide."}
+
+      email == current_user.email ->
+        {:error, "Vous êtes déjà le propriétaire de ce porte-monnaie."}
+
+      Enum.any?(existing_participants, fn
+        %{email: p_email} when is_binary(p_email) ->
+          String.downcase(p_email) == String.downcase(email)
+
+        _ ->
+          false
+      end) ->
+        {:error, "Cet utilisateur fait déjà partie des participants."}
+
+      user = Accounts.get_user_by_email(email) ->
+        {:ok, user}
+
+      true ->
+        {:error,
+         "Aucun utilisateur inscrit avec l'email #{email}. La personne doit posséder un compte sur la plateforme."}
+    end
+  end
+
+  @doc """
   Met à jour un porte-monnaie avec vérification que l'utilisateur est bien le propriétaire.
   """
   def update_wallet(%User{} = user, %Wallet{} = wallet, attrs) do

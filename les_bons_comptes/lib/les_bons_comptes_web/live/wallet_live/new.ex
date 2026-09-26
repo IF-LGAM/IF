@@ -1,6 +1,8 @@
 defmodule LesBonsComptesWeb.WalletLive.New do
   use LesBonsComptesWeb, :live_view
 
+  import LesBonsComptesWeb.WalletLive.WalletComponents
+
   alias LesBonsComptes.Accounts
   alias LesBonsComptes.Wallets
   alias LesBonsComptes.Wallets.Wallet
@@ -20,7 +22,6 @@ defmodule LesBonsComptesWeb.WalletLive.New do
      |> assign(:form, to_form(changeset))
      |> assign(:participants, [])
      |> assign(:available_users, available_users)
-     |> assign(:custom_name, "")
      |> assign(:custom_email, "")
      |> assign(:participant_error, nil)}
   end
@@ -32,24 +33,17 @@ defmodule LesBonsComptesWeb.WalletLive.New do
       |> Wallets.change_wallet(wallet_params)
       |> Map.put(:action, :validate)
 
-    custom_name = Map.get(params, "custom_name", socket.assigns.custom_name)
     custom_email = Map.get(params, "custom_email", socket.assigns.custom_email)
 
     {:noreply,
      socket
      |> assign(:form, to_form(changeset))
-     |> assign(:custom_name, custom_name)
      |> assign(:custom_email, custom_email)}
   end
 
   def handle_event("validate", params, socket) do
-    custom_name = Map.get(params, "custom_name", socket.assigns.custom_name)
     custom_email = Map.get(params, "custom_email", socket.assigns.custom_email)
-
-    {:noreply,
-     socket
-     |> assign(:custom_name, custom_name)
-     |> assign(:custom_email, custom_email)}
+    {:noreply, assign(socket, :custom_email, custom_email)}
   end
 
   @impl true
@@ -72,20 +66,15 @@ defmodule LesBonsComptesWeb.WalletLive.New do
         type: :registered
       }
 
-      updated_participants = socket.assigns.participants ++ [new_participant]
-      updated_available = Enum.reject(socket.assigns.available_users, &(&1.id == user.id))
-
       {:noreply,
        socket
-       |> assign(:participants, updated_participants)
-       |> assign(:available_users, updated_available)
+       |> assign(:participants, socket.assigns.participants ++ [new_participant])
+       |> assign(
+         :available_users,
+         Enum.reject(socket.assigns.available_users, &(&1.id == user.id))
+       )
        |> assign(:participant_error, nil)}
     end
-  end
-
-  @impl true
-  def handle_event("update_custom_name", %{"value" => name}, socket) do
-    {:noreply, assign(socket, :custom_name, name)}
   end
 
   @impl true
@@ -94,40 +83,15 @@ defmodule LesBonsComptesWeb.WalletLive.New do
   end
 
   @impl true
-  def handle_event("update_custom_inputs", params, socket) do
-    name =
-      params["custom_name"] || params["name"] || params["value"] || socket.assigns.custom_name
-
-    email = params["custom_email"] || params["email"] || socket.assigns.custom_email
-    {:noreply, socket |> assign(:custom_name, name) |> assign(:custom_email, email)}
-  end
-
-  @impl true
   def handle_event("add_custom_participant", params, socket) do
-    email =
-      String.trim(params["email"] || params["custom_email"] || socket.assigns.custom_email || "")
+    email = params["email"] || params["custom_email"] || socket.assigns.custom_email
 
-    current_user = socket.assigns.current_user
-
-    cond do
-      email == "" ->
-        {:noreply, assign(socket, :participant_error, "L'adresse email est obligatoire.")}
-
-      not (email =~ ~r/^[^\s]+@[^\s]+\.[^\s]+$/) ->
-        {:noreply,
-         assign(socket, :participant_error, "Veuillez saisir une adresse email valide.")}
-
-      email == current_user.email ->
-        {:noreply,
-         assign(socket, :participant_error, "Vous êtes déjà le propriétaire de ce porte-monnaie.")}
-
-      Enum.any?(socket.assigns.participants, fn p ->
-        String.downcase(p.email || "") == String.downcase(email)
-      end) ->
-        {:noreply,
-         assign(socket, :participant_error, "Cet utilisateur fait déjà partie des participants.")}
-
-      user = Accounts.get_user_by_email(email) ->
+    case Wallets.validate_new_participant(
+           socket.assigns.participants,
+           socket.assigns.current_user,
+           email
+         ) do
+      {:ok, user} ->
         new_participant = %{
           id: System.unique_integer([:positive]),
           user_id: user.id,
@@ -136,23 +100,18 @@ defmodule LesBonsComptesWeb.WalletLive.New do
           type: :registered
         }
 
-        updated_participants = socket.assigns.participants ++ [new_participant]
-        updated_available = Enum.reject(socket.assigns.available_users, &(&1.id == user.id))
-
         {:noreply,
          socket
-         |> assign(:participants, updated_participants)
-         |> assign(:available_users, updated_available)
+         |> assign(:participants, socket.assigns.participants ++ [new_participant])
+         |> assign(
+           :available_users,
+           Enum.reject(socket.assigns.available_users, &(&1.id == user.id))
+         )
          |> assign(:custom_email, "")
          |> assign(:participant_error, nil)}
 
-      true ->
-        {:noreply,
-         assign(
-           socket,
-           :participant_error,
-           "Aucun utilisateur inscrit avec l'email #{email}. La personne doit posséder un compte sur la plateforme."
-         )}
+      {:error, reason} ->
+        {:noreply, assign(socket, :participant_error, reason)}
     end
   end
 
@@ -264,40 +223,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                 <span>1. Informations générales</span>
               </h2>
 
-              <div class="space-y-4">
-                <.input
-                  field={@form[:name]}
-                  id="wallet-name-input"
-                  type="text"
-                  label="Nom du porte-monnaie"
-                  placeholder="Ex : Vacances à Barcelone, Coloc 2026, Weekend Ski..."
-                  required
-                />
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <.input
-                    field={@form[:currency]}
-                    id="wallet-currency-select"
-                    type="select"
-                    label="Devise"
-                    options={[
-                      {"Euro (€)", "EUR"},
-                      {"Dollar américain ($)", "USD"},
-                      {"Livre sterling (£)", "GBP"},
-                      {"Franc suisse (CHF)", "CHF"},
-                      {"Dollar canadien ($)", "CAD"}
-                    ]}
-                  />
-
-                  <.input
-                    field={@form[:description]}
-                    id="wallet-description-input"
-                    type="text"
-                    label="Description (optionnel)"
-                    placeholder="Ex : Dépenses de groupe pour l'été"
-                  />
-                </div>
-              </div>
+              <.wallet_fields form={@form} />
             </div>
           </div>
 
@@ -341,9 +267,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                   class="flex items-center justify-between p-3 rounded-xl bg-primary/10 border border-primary/20"
                 >
                   <div class="flex items-center gap-3">
-                    <div class="size-9 rounded-full bg-primary text-primary-content flex items-center justify-center font-bold text-sm shadow-sm">
-                      {String.first(@current_user.name || "U")}
-                    </div>
+                    <.member_avatar name={@current_user.name} is_owner={true} />
                     <div>
                       <div class="font-semibold text-sm text-base-content flex items-center gap-2">
                         <span>{@current_user.name}</span>
@@ -366,15 +290,11 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                       class="flex items-center justify-between p-3 rounded-xl bg-base-200/50 border border-base-200 hover:bg-base-200 transition-colors"
                     >
                       <div class="flex items-center gap-3">
-                        <div class="size-9 rounded-full bg-base-300 text-base-content flex items-center justify-center font-semibold text-sm">
-                          {String.first(participant.name || "?")}
-                        </div>
+                        <.member_avatar name={participant.name} is_owner={false} />
                         <div>
                           <div class="font-semibold text-sm text-base-content flex items-center gap-2">
                             <span>{participant.name}</span>
-                            <span class="badge badge-xs badge-info gap-0.5">
-                              <.icon name="hero-check" class="size-2.5" /> Inscrit
-                            </span>
+                            <.member_badge is_owner={false} />
                           </div>
                           <%= if participant.email do %>
                             <div class="text-xs text-base-content/60">{participant.email}</div>
@@ -399,57 +319,10 @@ defmodule LesBonsComptesWeb.WalletLive.New do
 
               <div class="divider my-2 text-xs text-base-content/50">Ajouter des personnes</div>
 
-              <%!-- Option A : Suggestions parmi les utilisateurs inscrits (IF-29) --%>
-              <div :if={@available_users != []} class="space-y-2">
-                <label class="text-xs font-semibold text-base-content/70">
-                  Ajouter un utilisateur inscrit sur Les Bons Comptes :
-                </label>
-                <div class="flex flex-wrap gap-2">
-                  <%= for user <- @available_users do %>
-                    <button
-                      type="button"
-                      id={"add-user-btn-#{user.id}"}
-                      phx-click="add_registered_user"
-                      phx-value-user_id={user.id}
-                      class="btn btn-outline btn-xs sm:btn-sm gap-1 hover:btn-primary"
-                    >
-                      <.icon name="hero-user-plus" class="size-3.5" />
-                      <span>{user.name}</span>
-                      <span class="text-xs opacity-60">({user.email})</span>
-                    </button>
-                  <% end %>
-                </div>
-              </div>
-
-              <%!-- Option B : Ajouter un participant inscrit par email (IF-29) --%>
-              <div class="bg-base-200/40 rounded-xl p-4 border border-base-200 space-y-3">
-                <label class="text-xs font-semibold text-base-content/80 flex items-center gap-1.5">
-                  <.icon name="hero-envelope" class="size-4 text-base-content/60" />
-                  <span>Ou ajouter un participant inscrit par son adresse email :</span>
-                </label>
-
-                <div class="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="email"
-                    id="custom-participant-email"
-                    name="custom_email"
-                    value={@custom_email}
-                    placeholder="Email de l'utilisateur (ex: ami@exemple.com)"
-                    phx-keyup="update_custom_email"
-                    class="input input-bordered input-sm flex-1"
-                  />
-                  <button
-                    type="button"
-                    id="add-custom-participant-btn"
-                    phx-click="add_custom_participant"
-                    phx-value-email={@custom_email}
-                    class="btn btn-secondary btn-sm gap-1"
-                  >
-                    <.icon name="hero-plus" class="size-4" />
-                    <span>Ajouter ce participant</span>
-                  </button>
-                </div>
-              </div>
+              <.participant_selector
+                available_users={@available_users}
+                custom_email={@custom_email}
+              />
             </div>
           </div>
 
