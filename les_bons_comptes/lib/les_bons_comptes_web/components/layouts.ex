@@ -31,6 +31,14 @@ defmodule LesBonsComptesWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
 
+  attr :current_user, :any,
+    default: nil,
+    doc: "the current authenticated user"
+
+  attr :show_sign_in, :boolean,
+    default: true,
+    doc: "whether to show the sign-in / sign-up button in navbar"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -43,14 +51,34 @@ defmodule LesBonsComptesWeb.Layouts do
           <span class="badge badge-sm badge-outline">v{Application.spec(:phoenix, :vsn)}</span>
         </a>
       </div>
+      
       <div class="flex-none">
         <ul class="flex flex-column px-1 space-x-3 items-center">
-          <li>
-            <.link navigate={~p"/sign-in"} class="btn btn-primary btn-sm sm:btn-md gap-1">
-              <.icon name="hero-user-plus" class="size-4" />
-              <span>Créer un compte</span>
+          <li :if={assigns[:current_user]}>
+            <span class="text-sm font-semibold text-base-content flex items-center gap-1.5 bg-base-200 px-3 py-1.5 rounded-lg">
+              <.icon name="hero-user-circle" class="size-5 text-primary" /> {@current_user.name}
+            </span>
+          </li>
+          
+          <li :if={assigns[:current_user]}>
+            <.link href={~p"/users/log_out"} method="delete" class="btn btn-outline btn-sm gap-1">
+              <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" />
+              <span>Déconnexion</span>
             </.link>
           </li>
+          
+          <li :if={!assigns[:current_user] && @show_sign_in}>
+            <.link navigate={~p"/sign-in"} class="btn btn-ghost btn-sm sm:btn-md">
+              Se connecter
+            </.link>
+          </li>
+          
+          <li :if={!assigns[:current_user] && @show_sign_in}>
+            <.link navigate={~p"/sign-up"} class="btn btn-primary btn-sm sm:btn-md gap-1">
+              <.icon name="hero-user-plus" class="size-4" /> <span>Créer un compte</span>
+            </.link>
+          </li>
+          
           <li>
             <.theme_toggle />
           </li>
@@ -63,8 +91,7 @@ defmodule LesBonsComptesWeb.Layouts do
         {render_slot(@inner_block)}
       </div>
     </main>
-
-    <.flash_group flash={@flash} />
+     <.flash_group flash={@flash} />
     """
   end
 
@@ -81,9 +108,7 @@ defmodule LesBonsComptesWeb.Layouts do
   def flash_group(assigns) do
     ~H"""
     <div id={@id} aria-live="polite">
-      <.flash kind={:info} flash={@flash} />
-      <.flash kind={:error} flash={@flash} />
-
+      <.flash kind={:info} flash={@flash} /> <.flash kind={:error} flash={@flash} />
       <.flash
         id="client-error"
         kind={:error}
@@ -98,7 +123,7 @@ defmodule LesBonsComptesWeb.Layouts do
         {gettext("Attempting to reconnect")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
-
+      
       <.flash
         id="server-error"
         kind={:error}
@@ -126,7 +151,6 @@ defmodule LesBonsComptesWeb.Layouts do
     ~H"""
     <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
       <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
       <button
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
@@ -134,7 +158,7 @@ defmodule LesBonsComptesWeb.Layouts do
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
-
+      
       <button
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
@@ -142,7 +166,7 @@ defmodule LesBonsComptesWeb.Layouts do
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
-
+      
       <button
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}

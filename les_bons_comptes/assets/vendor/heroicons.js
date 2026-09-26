@@ -32,6 +32,8 @@ module.exports = plugin(function({matchComponents, theme}) {
         "-webkit-mask": `var(--hero-${name})`,
         "mask": `var(--hero-${name})`,
         "mask-repeat": "no-repeat",
+        "mask-size": "contain",
+        "-webkit-mask-size": "contain",
         "background-color": "currentColor",
         "vertical-align": "middle",
         "display": "inline-block",
