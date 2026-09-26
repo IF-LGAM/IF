@@ -27,6 +27,13 @@ config :les_bons_comptes, LesBonsComptesWeb.Endpoint,
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:les_bons_comptes, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:les_bons_comptes, ~w(--watch)]}
+  ],
+  live_reload: [
+    patterns: [
+      ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
+      ~r"priv/gettext/.*(po)$",
+      ~r"lib/les_bons_comptes_web/(controllers|live|components)/.*(ex|heex)$"
+    ]
   ]
 
 # ## SSL Support
