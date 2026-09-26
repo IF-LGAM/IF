@@ -8,7 +8,7 @@ import Config
 config :les_bons_comptes, LesBonsComptes.Repo,
   username: "postgres",
   password: "postgres",
-  hostname: "localhost",
+  hostname: System.get_env("DATABASE_HOST") || "localhost",
   database: "les_bons_comptes_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2

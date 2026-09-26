@@ -18,6 +18,8 @@ defmodule LesBonsComptesWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/sign-in", SignInLive
+    live "/sign-up", SignInLive
   end
 
   # Other scopes may use custom stacks.
