@@ -7,11 +7,53 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     wallets = Wallets.list_wallets_for_user(user.id)
+    pending_invitations = Wallets.list_pending_invitations_for_user(user.id)
 
     {:ok,
      socket
      |> assign(:page_title, "Mes porte-monnaies - Les Bons Comptes")
-     |> assign(:wallets, wallets)}
+     |> assign(:wallets, wallets)
+     |> assign(:pending_invitations, pending_invitations)}
+  end
+
+  @impl true
+  def handle_event("accept_invitation", %{"id" => id}, socket) do
+    user = socket.assigns.current_user
+
+    case Wallets.accept_invitation(user, id) do
+      {:ok, _member} ->
+        wallets = Wallets.list_wallets_for_user(user.id)
+        pending_invitations = Wallets.list_pending_invitations_for_user(user.id)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Félicitations ! Vous avez rejoint le porte-monnaie avec succès.")
+         |> assign(:wallets, wallets)
+         |> assign(:pending_invitations, pending_invitations)}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Impossible d'accepter l'invitation : #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("decline_invitation", %{"id" => id}, socket) do
+    user = socket.assigns.current_user
+
+    case Wallets.decline_invitation(user, id) do
+      {:ok, _invitation} ->
+        pending_invitations = Wallets.list_pending_invitations_for_user(user.id)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Vous avez refusé l'invitation.")
+         |> assign(:pending_invitations, pending_invitations)}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Impossible de refuser l'invitation : #{inspect(reason)}")}
+    end
   end
 
   @impl true
@@ -38,6 +80,90 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
             <.icon name="hero-plus" class="size-5" />
             <span>Nouveau porte-monnaie</span>
           </.link>
+        </div>
+
+        <%!-- Section Invitations en attente (IF-44) --%>
+        <div
+          :if={@pending_invitations != []}
+          id="pending-invitations-section"
+          class="card bg-base-100 shadow-lg border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-base-100"
+        >
+          <div class="card-body p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="size-9 rounded-xl bg-primary text-primary-content flex items-center justify-center shadow-sm">
+                  <.icon name="hero-envelope-open" class="size-5" />
+                </div>
+                <div>
+                  <h2 class="text-lg font-bold text-base-content">
+                    Invitations reçues
+                  </h2>
+                  <p class="text-xs text-base-content/60">
+                    Vous avez été invité(e) à participer à des comptes partagés.
+                  </p>
+                </div>
+              </div>
+              <span class="badge badge-primary font-semibold">
+                {length(@pending_invitations)} en attente
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <%= for invitation <- @pending_invitations do %>
+                <div
+                  id={"invitation-card-#{invitation.id}"}
+                  class="bg-base-100 rounded-xl p-4 border border-base-200 shadow-sm flex flex-col justify-between gap-3 hover:border-primary/40 transition-colors"
+                >
+                  <div class="space-y-1">
+                    <div class="flex items-start justify-between gap-2">
+                      <h3 class="font-bold text-base text-base-content">
+                        {invitation.wallet.name}
+                      </h3>
+                      <span class="badge badge-primary badge-sm font-semibold">
+                        {invitation.wallet.currency}
+                      </span>
+                    </div>
+
+                    <p class="text-xs text-base-content/70">
+                      Invité(e) par
+                      <span class="font-semibold text-base-content">{invitation.inviter.name}</span>
+                    </p>
+
+                    <p
+                      :if={invitation.wallet.description}
+                      class="text-xs text-base-content/60 italic line-clamp-2"
+                    >
+                      « {invitation.wallet.description} »
+                    </p>
+                  </div>
+
+                  <div class="flex items-center justify-end gap-2 pt-2 border-t border-base-200">
+                    <button
+                      type="button"
+                      id={"decline-invitation-btn-#{invitation.id}"}
+                      phx-click="decline_invitation"
+                      phx-value-id={invitation.id}
+                      class="btn btn-ghost btn-sm text-error hover:bg-error/10"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                      <span>Refuser</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id={"accept-invitation-btn-#{invitation.id}"}
+                      phx-click="accept_invitation"
+                      phx-value-id={invitation.id}
+                      class="btn btn-primary btn-sm gap-1.5 shadow-sm"
+                    >
+                      <.icon name="hero-check" class="size-4" />
+                      <span>Accepter</span>
+                    </button>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
         </div>
 
         <%!-- Liste ou État vide --%>

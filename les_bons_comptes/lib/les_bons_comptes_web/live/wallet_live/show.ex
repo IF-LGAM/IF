@@ -192,7 +192,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                   class="btn btn-outline btn-xs gap-1 hover:btn-primary"
                 >
                   <.icon name="hero-user-plus" class="size-3.5" />
-                  <span>Gérer les participants</span>
+                  <span>Gérer les participants & invitations</span>
                 </.link>
               <% end %>
             </div>
@@ -223,6 +223,33 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                   </div>
                 </div>
               <% end %>
+            </div>
+
+            <%!-- Invitations en attente (IF-43) --%>
+            <div :if={@wallet.invitations != []} class="mt-4 pt-4 border-t border-base-200 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-warning uppercase tracking-wider flex items-center gap-1.5">
+                  <.icon name="hero-clock" class="size-4 text-warning" />
+                  <span>Invitations en attente d'acceptation ({length(@wallet.invitations)})</span>
+                </span>
+              </div>
+              <div id="wallet-pending-invitations-list" class="space-y-2">
+                <%= for invitation <- @wallet.invitations do %>
+                  <div
+                    id={"show-pending-invitation-#{invitation.id}"}
+                    class="p-2.5 rounded-xl bg-warning/5 border border-warning/20 flex items-center justify-between text-xs"
+                  >
+                    <div class="flex items-center gap-2">
+                      <.member_avatar name={invitation.invitee.name} size="size-7" />
+                      <div>
+                        <span class="font-semibold text-base-content">{invitation.invitee.name}</span>
+                        <span class="text-base-content/60">({invitation.email})</span>
+                      </div>
+                    </div>
+                    <.invitation_badge status={invitation.status} />
+                  </div>
+                <% end %>
+              </div>
             </div>
           </div>
         </div>
