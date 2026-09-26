@@ -24,7 +24,7 @@ defmodule LesBonsComptes.Accounts.User do
       message: "doit être une adresse email valide"
     )
     |> validate_length(:password, min: 6, max: 72, message: "doit contenir au moins 6 caractères")
-    |> unique_constraint(:email, message: "cette adresse email est déjà enregistrée")
+    |> unique_constraint(:email, message: "un compte existe déjà")
     |> hash_password()
   end
 

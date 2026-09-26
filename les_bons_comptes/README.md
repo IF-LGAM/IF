@@ -57,8 +57,23 @@ docker compose exec web mix ecto.migrate
 | Interface | URL locale |
 | :--- | :--- |
 | **Application Web** | [http://localhost:4000](http://localhost:4000) |
+| **Page d'inscription** | [http://localhost:4000/sign-up](http://localhost:4000/sign-up) |
+| **Page de connexion** | [http://localhost:4000/sign-in](http://localhost:4000/sign-in) |
 | **LiveDashboard Phoenix** | [http://localhost:4000/dev/dashboard](http://localhost:4000/dev/dashboard) |
 | **Boîte mail de test (Swoosh)** | [http://localhost:4000/dev/mailbox](http://localhost:4000/dev/mailbox) |
+
+### Compte Administrateur / Test par Défaut
+
+Un compte de test est préconfiguré dans le script de seed (`priv/repo/seeds.exs`) pour se connecter immédiatement :
+
+* **Identifiant (Email)** : `admin@exemple.com`
+* **Mot de passe** : `admin123`
+* **Nom** : `Admin`
+
+Pour injecter ou réinjecter ce compte dans la base PostgreSQL :
+```bash
+docker compose exec web mix run priv/repo/seeds.exs
+```
 
 ---
 

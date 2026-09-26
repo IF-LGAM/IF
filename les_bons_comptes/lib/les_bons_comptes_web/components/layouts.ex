@@ -35,6 +35,10 @@ defmodule LesBonsComptesWeb.Layouts do
     default: nil,
     doc: "the current authenticated user"
 
+  attr :show_sign_in, :boolean,
+    default: true,
+    doc: "whether to show the sign-in / sign-up button in navbar"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -63,8 +67,14 @@ defmodule LesBonsComptesWeb.Layouts do
             </.link>
           </li>
           
-          <li :if={!assigns[:current_user]}>
-            <.link navigate={~p"/sign-in"} class="btn btn-primary btn-sm sm:btn-md gap-1">
+          <li :if={!assigns[:current_user] && @show_sign_in}>
+            <.link navigate={~p"/sign-in"} class="btn btn-ghost btn-sm sm:btn-md">
+              Se connecter
+            </.link>
+          </li>
+          
+          <li :if={!assigns[:current_user] && @show_sign_in}>
+            <.link navigate={~p"/sign-up"} class="btn btn-primary btn-sm sm:btn-md gap-1">
               <.icon name="hero-user-plus" class="size-4" /> <span>Créer un compte</span>
             </.link>
           </li>

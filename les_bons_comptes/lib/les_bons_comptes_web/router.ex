@@ -30,7 +30,7 @@ defmodule LesBonsComptesWeb.Router do
     live_session :current_user,
       on_mount: [{LesBonsComptesWeb.UserAuth, :mount_current_user}] do
       live "/sign-in", SignInLive
-      live "/sign-up", SignInLive
+      live "/sign-up", SignUpLive
     end
   end
 

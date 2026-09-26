@@ -29,7 +29,7 @@ defmodule LesBonsComptes.AccountsTest do
     test "create_user/1 enforces email uniqueness" do
       assert {:ok, _user} = Accounts.create_user(@valid_attrs)
       assert {:error, changeset} = Accounts.create_user(%{@valid_attrs | name: "Other Name"})
-      assert %{email: ["cette adresse email est déjà enregistrée"]} = errors_on(changeset)
+      assert %{email: ["un compte existe déjà"]} = errors_on(changeset)
     end
 
     test "authenticate_user/2 returns user on valid credentials and error on invalid" do

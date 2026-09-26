@@ -4,50 +4,43 @@ defmodule LesBonsComptesWeb.SignInLiveTest do
 
   alias LesBonsComptes.Accounts
 
-  test "renders sign-in form on /sign-in", %{conn: conn} do
+  @user_attrs %{
+    name: "Claire Martin",
+    email: "claire@exemple.com",
+    password: "password123"
+  }
+
+  test "renders sign-in login form on /sign-in", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sign-in")
 
     assert has_element?(view, "#user-sign-in-form")
-    assert has_element?(view, "input[name=\"user[name]\"]")
     assert has_element?(view, "input[name=\"user[email]\"]")
     assert has_element?(view, "input[name=\"user[password]\"]")
-    assert has_element?(view, "#submit-user-btn")
+    assert has_element?(view, "#submit-login-btn")
+    refute has_element?(view, "input[name=\"user[name]\"]")
+    assert has_element?(view, "a[href=\"/sign-up\"]")
   end
 
-  test "validates form and shows errors on blur/change", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/sign-in")
+  test "logs in user upon posting form with valid credentials", %{conn: conn} do
+    {:ok, user} = Accounts.create_user(@user_attrs)
 
-    view
-    |> form("#user-sign-in-form", user: %{name: "", email: "bad-email", password: "123"})
-    |> render_change()
+    conn =
+      post(conn, ~p"/users/log_in", %{
+        "user" => %{"email" => user.email, "password" => "password123"}
+      })
 
-    assert has_element?(view, "#user-sign-in-form")
-  end
-
-  test "creates user in database and redirects to initialize session", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/sign-in")
-
-    valid_attrs = %{
-      name: "Martin Dupont",
-      email: "martin.dupont@test.fr",
-      password: "motdepassesolide"
-    }
-
-    assert {:error, {:redirect, %{to: login_path}}} =
-             view
-             |> form("#user-sign-in-form", user: valid_attrs)
-             |> render_submit()
-
-    assert login_path =~ "/users/log_in?token="
-
-    # Vérification que l'utilisateur est bien enregistré en base de données avec mot de passe haché
-    assert [user] = Enum.filter(Accounts.list_users(), &(&1.email == "martin.dupont@test.fr"))
-    assert user.name == "Martin Dupont"
-    assert user.hashed_password != nil
-
-    # Suivre la redirection pour vérifier l'initialisation de la session (IF-27)
-    conn = get(conn, login_path)
     assert get_session(conn, :user_id) == user.id
     assert redirected_to(conn) == ~p"/"
+  end
+
+  test "redirects with error on invalid credentials", %{conn: conn} do
+    conn =
+      post(conn, ~p"/users/log_in", %{
+        "user" => %{"email" => "inconnu@exemple.com", "password" => "mauvais_mdp"}
+      })
+
+    assert is_nil(get_session(conn, :user_id))
+    assert redirected_to(conn) == ~p"/sign-in"
+    assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "invalide"
   end
 end

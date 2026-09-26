@@ -18,7 +18,7 @@ unless Accounts.get_user_by_email(email) do
     Accounts.create_user(%{
       name: "Admin",
       email: email,
-      password: "admin"
+      password: "admin123"
     })
 
   IO.puts(" Utilisateur seed créé avec succès : #{user.email} (ID #{user.id})")
