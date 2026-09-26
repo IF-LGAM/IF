@@ -236,7 +236,10 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                     Les personnes sélectionnées recevront une invitation par email pour accepter de rejoindre le groupe.
                   </p>
                 </div>
-                <span class="badge badge-primary badge-outline font-semibold">
+                <span
+                  id="participants-count-badge"
+                  class="badge badge-primary badge-outline font-semibold whitespace-nowrap shrink-0 px-3 py-1.5 h-auto text-xs"
+                >
                   {1 + length(@participants)} personne(s)
                 </span>
               </div>

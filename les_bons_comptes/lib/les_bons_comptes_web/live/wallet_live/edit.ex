@@ -366,18 +366,24 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
               </div>
             </div>
 
-            <%!-- Liste des invitations en attente (IF-43) --%>
+            <%!-- Liste des invitations envoyées (IF-43) --%>
             <div :if={@wallet.invitations != []} class="space-y-2 pt-2">
-              <label class="text-xs font-semibold text-warning uppercase tracking-wider flex items-center gap-1.5">
-                <.icon name="hero-clock" class="size-4 text-warning" />
-                <span>Invitations en attente d'acceptation ({length(@wallet.invitations)})</span>
+              <label class="text-xs font-semibold text-base-content/70 uppercase tracking-wider flex items-center gap-1.5">
+                <.icon name="hero-envelope" class="size-4 text-primary" />
+                <span>Invitations envoyées ({length(@wallet.invitations)})</span>
               </label>
 
               <div id="pending-invitations-list" class="space-y-2">
                 <%= for invitation <- @wallet.invitations do %>
                   <div
                     id={"pending-invitation-#{invitation.id}"}
-                    class="flex items-center justify-between p-3 rounded-xl bg-warning/5 border border-warning/20"
+                    class={[
+                      "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                      if(invitation.status == "declined",
+                        do: "bg-error/5 border-error/20",
+                        else: "bg-warning/5 border-warning/20"
+                      )
+                    ]}
                   >
                     <div class="flex items-center gap-3">
                       <.member_avatar name={invitation.invitee.name} is_owner={false} />
@@ -397,12 +403,23 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
                       id={"cancel-invitation-btn-#{invitation.id}"}
                       phx-click="cancel_invitation"
                       phx-value-id={invitation.id}
-                      data-confirm={"Êtes-vous sûr de vouloir annuler l'invitation envoyée à #{invitation.invitee.name} ?"}
+                      data-confirm={
+                        if(invitation.status == "declined",
+                          do: "Retirer cette invitation refusée ?",
+                          else:
+                            "Êtes-vous sûr de vouloir annuler l'invitation envoyée à #{invitation.invitee.name} ?"
+                        )
+                      }
                       class="btn btn-ghost btn-xs text-error hover:bg-error/10 gap-1"
-                      title="Annuler l'invitation"
+                      title={
+                        if(invitation.status == "declined",
+                          do: "Retirer",
+                          else: "Annuler l'invitation"
+                        )
+                      }
                     >
-                      <.icon name="hero-x-mark" class="size-3.5" />
-                      <span>Annuler</span>
+                      <.icon name="hero-trash" class="size-3.5" />
+                      <span>{if(invitation.status == "declined", do: "Retirer", else: "Annuler")}</span>
                     </button>
                   </div>
                 <% end %>

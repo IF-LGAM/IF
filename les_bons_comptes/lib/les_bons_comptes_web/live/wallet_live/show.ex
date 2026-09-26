@@ -225,19 +225,25 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               <% end %>
             </div>
 
-            <%!-- Invitations en attente (IF-43) --%>
+            <%!-- Invitations envoyées (IF-43) --%>
             <div :if={@wallet.invitations != []} class="mt-4 pt-4 border-t border-base-200 space-y-3">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-warning uppercase tracking-wider flex items-center gap-1.5">
-                  <.icon name="hero-clock" class="size-4 text-warning" />
-                  <span>Invitations en attente d'acceptation ({length(@wallet.invitations)})</span>
+                <span class="text-xs font-semibold text-base-content/70 uppercase tracking-wider flex items-center gap-1.5">
+                  <.icon name="hero-envelope" class="size-4 text-primary" />
+                  <span>Invitations envoyées ({length(@wallet.invitations)})</span>
                 </span>
               </div>
               <div id="wallet-pending-invitations-list" class="space-y-2">
                 <%= for invitation <- @wallet.invitations do %>
                   <div
                     id={"show-pending-invitation-#{invitation.id}"}
-                    class="p-2.5 rounded-xl bg-warning/5 border border-warning/20 flex items-center justify-between text-xs"
+                    class={[
+                      "p-2.5 rounded-xl border flex items-center justify-between text-xs transition-colors",
+                      if(invitation.status == "declined",
+                        do: "bg-error/5 border-error/20",
+                        else: "bg-warning/5 border-warning/20"
+                      )
+                    ]}
                   >
                     <div class="flex items-center gap-2">
                       <.member_avatar name={invitation.invitee.name} size="size-7" />

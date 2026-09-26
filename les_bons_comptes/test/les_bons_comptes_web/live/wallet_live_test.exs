@@ -248,7 +248,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       # Le créateur est le membre initial, Lucas et Marc ont reçu une invitation en attente d'acceptation
       assert element(show_view, "#members-count") |> render() =~ "1"
       assert html =~ "Sophie"
-      assert html =~ "Invitations en attente"
+      assert html =~ "Invitations envoyées"
       assert html =~ "Lucas"
       assert html =~ "Marc"
     end
@@ -394,7 +394,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(edit_view) =~ "Invitation envoyée avec succès à Inscrit Nouveau"
       assert has_element?(edit_view, "#pending-invitations-list")
       assert render(edit_view) =~ "Inscrit Nouveau"
-      assert render(edit_view) =~ "En attente"
+      assert render(edit_view) =~ "Invitation envoyée"
 
       # 2. Envoi d'une invitation manuellement par email (IF-39)
       edit_view
@@ -514,6 +514,57 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       # N'est pas ajouté comme membre
       wallet_members = Wallets.get_wallet!(wallet.id).members
       refute Enum.any?(wallet_members, &(&1.user_id == invitee.id))
+    end
+
+    test "le propriétaire voit le statut Refusée lorsqu'un invité a décliné l'invitation", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Propriétaire"})
+      invitee = create_user(%{name: "Paul Refus", email: "paul@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Soirée"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "paul@test.com"})
+
+      # L'invité décline
+      {:ok, _} = Wallets.decline_invitation(invitee, invitation.id)
+
+      # Le propriétaire consulte la page d'édition
+      conn = authenticate_user(conn, owner)
+      {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/edit")
+
+      assert render(edit_view) =~ "Paul Refus"
+      assert render(edit_view) =~ "Refusée"
+      assert has_element?(edit_view, "#cancel-invitation-btn-#{invitation.id}")
+
+      # Le propriétaire consulte la page show
+      {:ok, show_view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+      assert render(show_view) =~ "Paul Refus"
+      assert render(show_view) =~ "Refusée"
+    end
+
+    test "la cloche de notification affiche le nombre d'invitations reçues dans la navbar", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Amis Groupe"})
+      user = create_user(%{name: "Receveur Notif", email: "notif@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Anniversaire"})
+
+      {:ok, _invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "notif@test.com"})
+
+      conn = authenticate_user(conn, user)
+      {:ok, view, _html} = live(conn, ~p"/wallets")
+
+      # Présence de la cloche de notification et de son badge
+      assert has_element?(view, "#notifications-bell-btn")
+      assert has_element?(view, "#notifications-count-badge")
+      assert element(view, "#notifications-count-badge") |> render() =~ "1"
+
+      # Contenu du menu déroulant
+      assert has_element?(view, "#notifications-dropdown-menu")
+      assert render(view) =~ "Anniversaire"
+      assert render(view) =~ "Amis Groupe"
     end
   end
 end

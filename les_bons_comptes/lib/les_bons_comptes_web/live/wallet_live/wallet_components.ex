@@ -39,7 +39,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     <%= case @status do %>
       <% "pending" -> %>
         <span class="badge badge-warning badge-xs gap-1">
-          <.icon name="hero-clock" class="size-2.5" /> En attente
+          <.icon name="hero-paper-airplane" class="size-2.5" /> Invitation envoyée
         </span>
       <% "accepted" -> %>
         <span class="badge badge-success badge-xs gap-1">

@@ -95,9 +95,18 @@ defmodule LesBonsComptesWeb.UserAuth do
   end
 
   defp mount_current_user(socket, session) do
-    Phoenix.Component.assign_new(socket, :current_user, fn ->
-      if user_id = session["user_id"] do
-        Accounts.get_user(user_id)
+    socket =
+      Phoenix.Component.assign_new(socket, :current_user, fn ->
+        if user_id = session["user_id"] do
+          Accounts.get_user(user_id)
+        end
+      end)
+
+    Phoenix.Component.assign_new(socket, :pending_invitations, fn ->
+      if user = socket.assigns[:current_user] do
+        LesBonsComptes.Wallets.list_pending_invitations_for_user(user.id)
+      else
+        []
       end
     end)
   end

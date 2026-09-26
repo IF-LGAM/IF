@@ -7,9 +7,36 @@ defmodule LesBonsComptes.Wallets do
 
   import Ecto.Query, warn: false
   alias LesBonsComptes.Repo
-  alias LesBonsComptes.Accounts
   alias LesBonsComptes.Accounts.User
-  alias LesBonsComptes.Wallets.{InvitationNotifier, Wallet, WalletInvitation, WalletMember}
+  alias LesBonsComptes.Wallets.{Invitations, Members, Wallet, WalletInvitation, WalletMember}
+
+  # ---------------------------------------------------------------------------
+  # Délégations vers Members et Invitations
+  # ---------------------------------------------------------------------------
+
+  # Membres et permissions (IF-30, IF-36, IF-38, IF-39)
+  defdelegate owner?(wallet, user), to: Members
+  defdelegate add_member(wallet, attrs), to: Members, as: :add
+  defdelegate add_member(user, wallet, attrs), to: Members, as: :add
+  defdelegate remove_member(user, wallet, member_id), to: Members, as: :remove
+  defdelegate leave_wallet(user, wallet), to: Members, as: :leave
+  defdelegate validate_new_participant(existing_participants, current_user, email), to: Members
+
+  # Invitations (IF-37, IF-40, IF-41, IF-42, IF-43, IF-44, IF-45)
+  defdelegate create_invitation(inviter, wallet, attrs), to: Invitations, as: :create
+
+  defdelegate list_pending_invitations_for_user(user_id),
+    to: Invitations,
+    as: :list_pending_for_user
+
+  defdelegate list_pending_invitations_for_wallet(wallet_id),
+    to: Invitations,
+    as: :list_pending_for_wallet
+
+  defdelegate get_invitation!(id), to: Invitations, as: :get!
+  defdelegate accept_invitation(user, invitation_or_id), to: Invitations, as: :accept
+  defdelegate decline_invitation(user, invitation_or_id), to: Invitations, as: :decline
+  defdelegate cancel_invitation(user, invitation_id), to: Invitations, as: :cancel
 
   @doc """
   Retourne tous les porte-monnaies auxquels l'utilisateur participe
@@ -37,7 +64,7 @@ defmodule LesBonsComptes.Wallets do
       members: from(m in WalletMember, order_by: [asc: m.id]),
       invitations:
         from(i in WalletInvitation,
-          where: i.status == "pending",
+          where: i.status in ["pending", "declined"],
           order_by: [desc: i.inserted_at],
           preload: [:invitee, :inviter]
         )
@@ -96,7 +123,7 @@ defmodule LesBonsComptes.Wallets do
 
           case Repo.insert(owner_changeset) do
             {:ok, _owner} ->
-              case insert_additional_members(wallet, creator, participants) do
+              case Members.insert_additional_members(wallet, creator, participants) do
                 :ok ->
                   get_wallet!(wallet.id)
 
@@ -118,165 +145,6 @@ defmodule LesBonsComptes.Wallets do
       {:error, {:member, changeset}} -> {:error, :member, changeset}
       {:error, {:owner_member, changeset}} -> {:error, :owner_member, changeset}
       {:error, reason} -> {:error, :general, reason}
-    end
-  end
-
-  defp insert_additional_members(wallet, creator, participants) do
-    filtered =
-      participants
-      |> Enum.reject(fn p ->
-        # Ignore uniquement les entrées totalement vides ou le créateur lui-même
-        p_name = p[:name] || p["name"]
-        p_email = p[:email] || p["email"]
-        p_user_id = p[:user_id] || p["user_id"]
-
-        is_blank_entry =
-          (is_nil(p_name) or String.trim(to_string(p_name)) == "") and
-            (is_nil(p_email) or String.trim(to_string(p_email)) == "") and
-            is_nil(p_user_id)
-
-        is_blank_entry or (p_user_id && p_user_id == creator.id)
-      end)
-
-    Enum.reduce_while(filtered, :ok, fn participant, :ok ->
-      raw_name = participant[:name] || participant["name"]
-      user_id = participant[:user_id] || participant["user_id"]
-      user = if user_id, do: Accounts.get_user(user_id), else: nil
-
-      name =
-        if(is_binary(raw_name), do: String.trim(raw_name), else: raw_name) || (user && user.name)
-
-      email = participant[:email] || participant["email"] || (user && user.email)
-
-      changeset =
-        %WalletMember{wallet_id: wallet.id, user_id: user_id}
-        |> WalletMember.changeset(%{
-          name: name,
-          email: email,
-          role: participant[:role] || participant["role"] || "member"
-        })
-
-      case Repo.insert(changeset) do
-        {:ok, _member} -> {:cont, :ok}
-        {:error, err_changeset} -> {:halt, {:error, :member, err_changeset}}
-      end
-    end)
-  end
-
-  @doc """
-  Ajoute un nouveau participant à un porte-monnaie avec vérification que l'utilisateur est le propriétaire.
-  """
-  def add_member(%User{} = user, %Wallet{} = wallet, attrs) do
-    if owner?(wallet, user) do
-      add_member(wallet, attrs)
-    else
-      {:error, :unauthorized}
-    end
-  end
-
-  @doc """
-  Ajoute un nouveau participant à un porte-monnaie existant.
-  """
-  def add_member(%Wallet{} = wallet, attrs) do
-    user_id = attrs[:user_id] || attrs["user_id"]
-    user = if user_id, do: Accounts.get_user(user_id), else: nil
-    name = attrs[:name] || attrs["name"] || (user && user.name)
-    email = attrs[:email] || attrs["email"] || (user && user.email)
-    role = attrs[:role] || attrs["role"] || "member"
-
-    %WalletMember{wallet_id: wallet.id, user_id: user_id}
-    |> WalletMember.changeset(%{
-      name: name,
-      email: email,
-      role: role
-    })
-    |> Repo.insert()
-  end
-
-  @doc """
-  Retire un participant d'un porte-monnaie avec vérification que l'utilisateur est le propriétaire.
-  Le propriétaire ne peut pas être retiré de son propre porte-monnaie.
-  """
-  def remove_member(%User{} = user, %Wallet{} = wallet, member_id) do
-    if owner?(wallet, user) do
-      case Repo.get_by(WalletMember, id: member_id, wallet_id: wallet.id) do
-        nil ->
-          {:error, :not_found}
-
-        %WalletMember{role: "owner"} ->
-          {:error, :cannot_remove_owner}
-
-        %WalletMember{} = member ->
-          Repo.delete(member)
-      end
-    else
-      {:error, :unauthorized}
-    end
-  end
-
-  @doc """
-  Permet à un membre (non-propriétaire) de quitter volontairement un porte-monnaie commun.
-  """
-  def leave_wallet(%User{} = user, %Wallet{} = wallet) do
-    case Repo.get_by(WalletMember, wallet_id: wallet.id, user_id: user.id) do
-      nil ->
-        {:error, :not_found}
-
-      %WalletMember{role: "owner"} ->
-        {:error, :owner_cannot_leave}
-
-      %WalletMember{} = member ->
-        Repo.delete(member)
-    end
-  end
-
-  @doc """
-  Vérifie si un utilisateur est le propriétaire du porte-monnaie.
-  """
-  def owner?(%Wallet{} = wallet, %User{} = user) do
-    wallet.creator_id == user.id
-  end
-
-  def owner?(%Wallet{} = wallet, user_id) when is_integer(user_id) do
-    wallet.creator_id == user_id
-  end
-
-  def owner?(_, _), do: false
-
-  @doc """
-  Valide l'ajout d'un nouveau participant par email pour un créateur ou propriétaire donné.
-  Vérifie que l'email est présent, valide, n'appartient pas au propriétaire,
-  n'est pas déjà dans la liste des participants, et correspond à un compte inscrit.
-  Retourne `{:ok, user}` ou `{:error, message}`.
-  """
-  def validate_new_participant(existing_participants, %User{} = current_user, email) do
-    email = String.trim(to_string(email || ""))
-
-    cond do
-      email == "" ->
-        {:error, "L'adresse email est obligatoire."}
-
-      not (email =~ ~r/^[^\s]+@[^\s]+\.[^\s]+$/) ->
-        {:error, "Veuillez saisir une adresse email valide."}
-
-      email == current_user.email ->
-        {:error, "Vous êtes déjà le propriétaire de ce porte-monnaie."}
-
-      Enum.any?(existing_participants, fn
-        %{email: p_email} when is_binary(p_email) ->
-          String.downcase(p_email) == String.downcase(email)
-
-        _ ->
-          false
-      end) ->
-        {:error, "Cet utilisateur fait déjà partie des participants."}
-
-      user = Accounts.get_user_by_email(email) ->
-        {:ok, user}
-
-      true ->
-        {:error,
-         "Aucun utilisateur inscrit avec l'email #{email}. La personne doit posséder un compte sur la plateforme."}
     end
   end
 
@@ -316,185 +184,5 @@ defmodule LesBonsComptes.Wallets do
   """
   def delete_wallet(%Wallet{} = wallet) do
     Repo.delete(wallet)
-  end
-
-  # ---------------------------------------------------------------------------
-  # Invitations au porte-monnaie (IF-37, IF-40, IF-41, IF-42, IF-44, IF-45)
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  Crée et envoie une invitation pour rejoindre un porte-monnaie (IF-40, IF-41, IF-42).
-  Vérifie que l'émetteur est propriétaire, valide que l'utilisateur invité existe,
-  n'est pas déjà membre, et n'a pas déjà d'invitation en attente.
-  """
-  def create_invitation(%User{} = inviter, %Wallet{} = wallet, attrs) do
-    email = attrs[:email] || attrs["email"]
-    wallet = Repo.preload(wallet, [:members])
-
-    with :ok <- validate_invitation_permissions(inviter, wallet),
-         {:ok, invitee} <- validate_new_participant(wallet.members, inviter, email),
-         :ok <- validate_not_already_invited(wallet.id, invitee.id) do
-      %WalletInvitation{
-        wallet_id: wallet.id,
-        inviter_id: inviter.id,
-        invitee_id: invitee.id
-      }
-      |> WalletInvitation.changeset(%{
-        email: invitee.email,
-        status: "pending"
-      })
-      |> Repo.insert()
-      |> case do
-        {:ok, invitation} ->
-          invitation = Repo.preload(invitation, [:wallet, :inviter, :invitee])
-          _ = InvitationNotifier.deliver_invitation(invitation, wallet, inviter)
-          {:ok, invitation}
-
-        {:error, changeset} ->
-          {:error, changeset}
-      end
-    end
-  end
-
-  defp validate_invitation_permissions(user, wallet) do
-    if owner?(wallet, user) do
-      :ok
-    else
-      {:error, :unauthorized}
-    end
-  end
-
-  defp validate_not_already_invited(wallet_id, invitee_id) do
-    query =
-      from(i in WalletInvitation,
-        where: i.wallet_id == ^wallet_id and i.invitee_id == ^invitee_id and i.status == "pending"
-      )
-
-    if Repo.exists?(query) do
-      {:error, "Une invitation est déjà en attente pour cet utilisateur."}
-    else
-      :ok
-    end
-  end
-
-  @doc """
-  Liste toutes les invitations en attente pour un utilisateur donné (IF-44).
-  """
-  def list_pending_invitations_for_user(user_id) when is_integer(user_id) do
-    from(i in WalletInvitation,
-      where: i.invitee_id == ^user_id and i.status == "pending",
-      order_by: [desc: i.inserted_at],
-      preload: [:wallet, :inviter]
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  Liste toutes les invitations en attente pour un porte-monnaie donné (IF-43).
-  """
-  def list_pending_invitations_for_wallet(wallet_id) when is_integer(wallet_id) do
-    from(i in WalletInvitation,
-      where: i.wallet_id == ^wallet_id and i.status == "pending",
-      order_by: [desc: i.inserted_at],
-      preload: [:invitee, :inviter]
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  Récupère une invitation par son identifiant. Lève si introuvable.
-  """
-  def get_invitation!(id) do
-    WalletInvitation
-    |> Repo.get!(id)
-    |> Repo.preload([:wallet, :inviter, :invitee])
-  end
-
-  @doc """
-  Accepte une invitation au porte-monnaie (IF-44, IF-45).
-  Associe le compte de l'utilisateur invité comme membre effectif du groupe dans une transaction.
-  """
-  def accept_invitation(%User{} = user, invitation_id)
-      when is_integer(invitation_id) or is_binary(invitation_id) do
-    invitation = get_invitation!(invitation_id)
-    accept_invitation(user, invitation)
-  end
-
-  def accept_invitation(%User{} = user, %WalletInvitation{} = invitation) do
-    cond do
-      invitation.invitee_id != user.id ->
-        {:error, :unauthorized}
-
-      invitation.status != "pending" ->
-        {:error, :already_processed}
-
-      true ->
-        Repo.transaction(fn ->
-          {:ok, updated_invitation} =
-            invitation
-            |> WalletInvitation.changeset(%{status: "accepted"})
-            |> Repo.update()
-
-          member_attrs = %{
-            user_id: user.id,
-            name: user.name,
-            email: user.email,
-            role: "member"
-          }
-
-          case add_member(%Wallet{id: invitation.wallet_id}, member_attrs) do
-            {:ok, member} ->
-              {updated_invitation, member}
-
-            {:error, changeset} ->
-              Repo.rollback({:member, changeset})
-          end
-        end)
-        |> case do
-          {:ok, {_invitation, member}} -> {:ok, member}
-          {:error, {:member, changeset}} -> {:error, changeset}
-          {:error, reason} -> {:error, reason}
-        end
-    end
-  end
-
-  @doc """
-  Refuse une invitation au porte-monnaie (IF-44).
-  """
-  def decline_invitation(%User{} = user, invitation_id)
-      when is_integer(invitation_id) or is_binary(invitation_id) do
-    invitation = get_invitation!(invitation_id)
-    decline_invitation(user, invitation)
-  end
-
-  def decline_invitation(%User{} = user, %WalletInvitation{} = invitation) do
-    cond do
-      invitation.invitee_id != user.id ->
-        {:error, :unauthorized}
-
-      invitation.status != "pending" ->
-        {:error, :already_processed}
-
-      true ->
-        invitation
-        |> WalletInvitation.changeset(%{status: "declined"})
-        |> Repo.update()
-    end
-  end
-
-  @doc """
-  Permet au propriétaire du porte-monnaie d'annuler une invitation envoyée.
-  """
-  def cancel_invitation(%User{} = user, invitation_id) do
-    invitation = get_invitation!(invitation_id)
-    wallet = get_wallet!(invitation.wallet_id)
-
-    if owner?(wallet, user) and invitation.status == "pending" do
-      invitation
-      |> WalletInvitation.changeset(%{status: "cancelled"})
-      |> Repo.update()
-    else
-      {:error, :unauthorized}
-    end
   end
 end

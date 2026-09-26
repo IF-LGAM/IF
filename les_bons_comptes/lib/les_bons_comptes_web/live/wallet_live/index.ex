@@ -59,7 +59,11 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_invitations={@pending_invitations}
+    >
       <div class="max-w-4xl mx-auto space-y-6">
         <%!-- En-tête avec bouton Créer --%>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
