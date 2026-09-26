@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: les_bons_comptes_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: les_bons_comptes_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    container_name: les_bons_comptes_web
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "4000:4000"
+    volumes:
+      # Montage de ton code source en direct (live-reload sur macOS)
+      - .:/app
+      # Volume isolé pour éviter d'écraser les builds compilés Alpine Linux avec ceux de macOS
+      - deps:/app/deps
+      - build:/app/_build
+    environment:
+      DATABASE_HOST: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: les_bons_comptes_dev
+
+volumes:
+  postgres_data:
+  deps:
+  build:
