@@ -30,6 +30,34 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
+  Affiche le badge du statut d'une invitation.
+  """
+  attr :status, :string, default: "pending"
+
+  def invitation_badge(assigns) do
+    ~H"""
+    <%= case @status do %>
+      <% "pending" -> %>
+        <span class="badge badge-warning badge-xs gap-1">
+          <.icon name="hero-paper-airplane" class="size-2.5" /> Invitation envoyée
+        </span>
+      <% "accepted" -> %>
+        <span class="badge badge-success badge-xs gap-1">
+          <.icon name="hero-check" class="size-2.5" /> Acceptée
+        </span>
+      <% "declined" -> %>
+        <span class="badge badge-error badge-xs gap-1">
+          <.icon name="hero-x-mark" class="size-2.5" /> Refusée
+        </span>
+      <% _ -> %>
+        <span class="badge badge-ghost badge-xs">
+          {@status}
+        </span>
+    <% end %>
+    """
+  end
+
+  @doc """
   Affiche l'avatar circulaire avec la première lettre du nom.
   """
   attr :name, :string, default: "?"

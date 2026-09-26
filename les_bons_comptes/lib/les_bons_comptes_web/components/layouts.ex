@@ -39,9 +39,27 @@ defmodule LesBonsComptesWeb.Layouts do
     default: true,
     doc: "whether to show the sign-in / sign-up button in navbar"
 
+  attr :pending_invitations, :list,
+    default: nil,
+    doc: "optional list of pending invitations for the notifications bell"
+
   slot :inner_block, required: true
 
   def app(assigns) do
+    notifications =
+      cond do
+        is_list(assigns[:pending_invitations]) ->
+          assigns[:pending_invitations]
+
+        assigns[:current_user] ->
+          LesBonsComptes.Wallets.list_pending_invitations_for_user(assigns[:current_user].id)
+
+        true ->
+          []
+      end
+
+    assigns = assign(assigns, :notifications, notifications)
+
     ~H"""
     <header class="navbar px-4 sm:px-6 lg:px-8">
       <div class="flex-1">
@@ -66,6 +84,93 @@ defmodule LesBonsComptesWeb.Layouts do
               <.icon name="hero-plus" class="size-4" />
               <span>Créer</span>
             </.link>
+          </li>
+
+          <%!-- Cloche de notification (Item 1) --%>
+          <li :if={assigns[:current_user]}>
+            <div class="dropdown dropdown-end">
+              <button
+                tabindex="0"
+                role="button"
+                id="notifications-bell-btn"
+                class="btn btn-ghost btn-circle btn-sm relative"
+                aria-label="Notifications d'invitations"
+              >
+                <.icon name="hero-bell" class="size-5 text-base-content" />
+                <span
+                  :if={@notifications != []}
+                  id="notifications-count-badge"
+                  class="badge badge-primary badge-xs absolute -top-1 -right-1 font-bold animate-pulse"
+                >
+                  {length(@notifications)}
+                </span>
+              </button>
+
+              <div
+                tabindex="0"
+                id="notifications-dropdown-menu"
+                class="dropdown-content z-50 menu p-3 shadow-2xl bg-base-100 rounded-2xl w-80 sm:w-96 border border-base-200 mt-2 space-y-2"
+              >
+                <div class="flex items-center justify-between pb-2 border-b border-base-200 px-1">
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-bell" class="size-4 text-primary" />
+                    <span class="font-bold text-sm text-base-content">Notifications</span>
+                  </div>
+                  <span class="badge badge-primary badge-sm font-semibold">
+                    {length(@notifications)} en attente
+                  </span>
+                </div>
+
+                <%= if @notifications == [] do %>
+                  <div class="py-6 text-center text-xs text-base-content/60 space-y-1">
+                    <.icon name="hero-check-circle" class="size-8 mx-auto text-success/60" />
+                    <p class="font-medium text-base-content/80">Aucune invitation en attente</p>
+                    <p class="text-base-content/50">Vous êtes à jour !</p>
+                  </div>
+                <% else %>
+                  <div class="max-h-72 overflow-y-auto space-y-2 py-1">
+                    <%= for invitation <- @notifications do %>
+                      <div
+                        id={"bell-invitation-#{invitation.id}"}
+                        class="p-2.5 rounded-xl bg-base-200/50 hover:bg-base-200 border border-base-200 text-xs space-y-1.5 transition-colors"
+                      >
+                        <div class="flex items-start justify-between gap-1">
+                          <div>
+                            <p class="font-bold text-base-content">{invitation.wallet.name}</p>
+                            <p class="text-base-content/60">
+                              Invité(e) par
+                              <span class="font-medium text-base-content">{invitation.inviter.name}</span>
+                            </p>
+                          </div>
+                          <span class="badge badge-primary badge-xs">
+                            {invitation.wallet.currency}
+                          </span>
+                        </div>
+
+                        <div class="flex items-center justify-end gap-1.5 pt-1">
+                          <.link
+                            navigate={~p"/wallets"}
+                            class="btn btn-primary btn-xs gap-1"
+                          >
+                            <span>Voir et répondre</span>
+                            <.icon name="hero-arrow-right" class="size-3" />
+                          </.link>
+                        </div>
+                      </div>
+                    <% end %>
+                  </div>
+
+                  <div class="pt-1 border-t border-base-200 text-center">
+                    <.link
+                      navigate={~p"/wallets"}
+                      class="text-xs text-primary font-semibold hover:underline block py-1"
+                    >
+                      Gérer toutes mes invitations
+                    </.link>
+                  </div>
+                <% end %>
+              </div>
+            </div>
           </li>
 
           <li :if={assigns[:current_user]}>

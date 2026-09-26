@@ -267,4 +267,134 @@ defmodule LesBonsComptes.WalletsTest do
       assert {:error, :owner_cannot_leave} = Wallets.leave_wallet(owner, wallet)
     end
   end
+
+  describe "Invitations au porte-monnaie (IF-37, IF-40, IF-41, IF-42, IF-44, IF-45)" do
+    test "create_invitation/3 crée une invitation en attente et prépare la notification" do
+      owner = create_user(%{name: "Alice"})
+      invitee = create_user(%{name: "Bob", email: "bob_invite@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Vacances 2026"})
+
+      assert {:ok, invitation} =
+               Wallets.create_invitation(owner, wallet, %{email: "bob_invite@test.com"})
+
+      assert invitation.status == "pending"
+      assert invitation.inviter_id == owner.id
+      assert invitation.invitee_id == invitee.id
+      assert invitation.wallet_id == wallet.id
+      assert invitation.email == "bob_invite@test.com"
+    end
+
+    test "create_invitation/3 refuse si l'utilisateur invité est inconnu (IF-41)" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Voyage"})
+
+      assert {:error, msg} =
+               Wallets.create_invitation(owner, wallet, %{email: "inconnu@test.com"})
+
+      assert msg =~ "Aucun utilisateur inscrit"
+    end
+
+    test "create_invitation/3 refuse si l'utilisateur est déjà membre (IF-41)" do
+      owner = create_user()
+      member = create_user(%{email: "member@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Voyage"}, [
+          %{name: member.name, email: member.email, user_id: member.id}
+        ])
+
+      assert {:error, msg} =
+               Wallets.create_invitation(owner, wallet, %{email: "member@test.com"})
+
+      assert msg =~ "fait déjà partie des participants"
+    end
+
+    test "create_invitation/3 refuse si une invitation est déjà en attente (IF-41)" do
+      owner = create_user()
+      _invitee = create_user(%{email: "already_invited@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Voyage"})
+
+      assert {:ok, _} =
+               Wallets.create_invitation(owner, wallet, %{email: "already_invited@test.com"})
+
+      assert {:error, msg} =
+               Wallets.create_invitation(owner, wallet, %{email: "already_invited@test.com"})
+
+      assert msg =~ "déjà en attente"
+    end
+
+    test "create_invitation/3 refuse si l'émetteur n'est pas le propriétaire" do
+      owner = create_user()
+      stranger = create_user()
+      _invitee = create_user(%{email: "invitee@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Voyage"})
+
+      assert {:error, :unauthorized} =
+               Wallets.create_invitation(stranger, wallet, %{email: "invitee@test.com"})
+    end
+
+    test "accept_invitation/2 associe l'utilisateur au porte-monnaie et met à jour le statut (IF-44, IF-45)" do
+      owner = create_user(%{name: "Owner"})
+      invitee = create_user(%{name: "Invitee", email: "invitee@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Fête"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "invitee@test.com"})
+
+      assert {:ok, member} = Wallets.accept_invitation(invitee, invitation.id)
+      assert member.user_id == invitee.id
+      assert member.role == "member"
+
+      # Vérification dans la base
+      updated_wallet = Wallets.get_wallet!(wallet.id)
+      assert length(updated_wallet.members) == 2
+      assert Enum.any?(updated_wallet.members, &(&1.user_id == invitee.id))
+
+      # L'invitation n'est plus en attente
+      assert Wallets.list_pending_invitations_for_user(invitee.id) == []
+    end
+
+    test "accept_invitation/2 refuse si un autre utilisateur tente d'accepter" do
+      owner = create_user()
+      _invitee = create_user(%{email: "destinataire@test.com"})
+      stranger = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Projet"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "destinataire@test.com"})
+
+      assert {:error, :unauthorized} = Wallets.accept_invitation(stranger, invitation.id)
+    end
+
+    test "decline_invitation/2 passe le statut à declined sans créer de membre (IF-44)" do
+      owner = create_user()
+      invitee = create_user(%{email: "decline@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Sortie"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "decline@test.com"})
+
+      assert {:ok, declined} = Wallets.decline_invitation(invitee, invitation.id)
+      assert declined.status == "declined"
+
+      # Ne fait pas partie des membres
+      updated_wallet = Wallets.get_wallet!(wallet.id)
+      assert length(updated_wallet.members) == 1
+      refute Enum.any?(updated_wallet.members, &(&1.user_id == invitee.id))
+      assert Wallets.list_pending_invitations_for_user(invitee.id) == []
+    end
+
+    test "cancel_invitation/2 permet au propriétaire d'annuler l'invitation" do
+      owner = create_user()
+      _invitee = create_user(%{email: "cancel@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Roadtrip"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "cancel@test.com"})
+
+      assert {:ok, cancelled} = Wallets.cancel_invitation(owner, invitation.id)
+      assert cancelled.status == "cancelled"
+      assert Wallets.list_pending_invitations_for_wallet(wallet.id) == []
+    end
+  end
 end

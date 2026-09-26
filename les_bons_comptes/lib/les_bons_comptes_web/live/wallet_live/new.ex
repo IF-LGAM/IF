@@ -143,33 +143,29 @@ defmodule LesBonsComptesWeb.WalletLive.New do
   def handle_event("save", %{"wallet" => wallet_params}, socket) do
     current_user = socket.assigns.current_user
 
-    participants_payload =
-      Enum.map(socket.assigns.participants, fn p ->
-        %{
-          name: p.name,
-          email: p.email,
-          user_id: p[:user_id],
-          role: "member"
-        }
-      end)
-
-    case Wallets.create_wallet(current_user, wallet_params, participants_payload) do
+    # Création du porte-monnaie avec le créateur comme propriétaire
+    # Les autres participants recevront une invitation à accepter (IF-37, IF-42)
+    case Wallets.create_wallet(current_user, wallet_params, []) do
       {:ok, wallet} ->
+        # Envoi des invitations par email aux participants choisis (IF-40, IF-42)
+        Enum.each(socket.assigns.participants, fn p ->
+          _ = Wallets.create_invitation(current_user, wallet, %{email: p.email})
+        end)
+
+        flash_msg =
+          if socket.assigns.participants != [] do
+            "Le porte-monnaie « #{wallet.name} » a été créé avec succès ! Les invitations ont été envoyées."
+          else
+            "Le porte-monnaie « #{wallet.name} » a été créé avec succès !"
+          end
+
         {:noreply,
          socket
-         |> put_flash(:info, "Le porte-monnaie « #{wallet.name} » a été créé avec succès !")
+         |> put_flash(:info, flash_msg)
          |> push_navigate(to: ~p"/wallets/#{wallet.id}")}
 
       {:error, :wallet, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :form, to_form(%{changeset | action: :validate}))}
-
-      {:error, :member, %Ecto.Changeset{} = changeset} ->
-        error_msg =
-          Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
-          |> Enum.map_join(", ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
-
-        {:noreply,
-         assign(socket, :participant_error, "Erreur dans les participants : #{error_msg}")}
 
       {:error, _step, reason} ->
         {:noreply,
@@ -203,7 +199,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
             Créer un porte-monnaie commun
           </h1>
           <p class="text-sm text-base-content/70">
-            Configurez votre groupe, choisissez la devise et ajoutez vos amis pour commencer à partager les frais.
+            Configurez votre groupe, choisissez la devise et invitez vos amis pour commencer à partager les frais.
           </p>
         </div>
 
@@ -227,21 +223,24 @@ defmodule LesBonsComptesWeb.WalletLive.New do
             </div>
           </div>
 
-          <%!-- Carte Sélection des participants (IF-29, IF-30, IF-36) --%>
+          <%!-- Carte Sélection des participants à inviter (IF-29, IF-30, IF-36, IF-38, IF-39) --%>
           <div class="card bg-base-100 shadow-xl border border-base-200">
             <div class="card-body p-6 sm:p-8 space-y-5">
               <div class="flex items-center justify-between">
                 <div>
                   <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
-                    <.icon name="hero-user-group" class="size-5 text-primary" />
-                    <span>2. Participants au porte-monnaie</span>
+                    <.icon name="hero-envelope" class="size-5 text-primary" />
+                    <span>2. Inviter des participants</span>
                   </h2>
                   <p class="text-xs text-base-content/60 mt-0.5">
-                    Sélectionnez des utilisateurs de la plateforme ou ajoutez des amis manuellement.
+                    Les personnes sélectionnées recevront une invitation par email pour accepter de rejoindre le groupe.
                   </p>
                 </div>
-                <span class="badge badge-primary badge-outline font-semibold">
-                  {1 + length(@participants)} participant(s)
+                <span
+                  id="participants-count-badge"
+                  class="badge badge-primary badge-outline font-semibold whitespace-nowrap shrink-0 px-3 py-1.5 h-auto text-xs"
+                >
+                  {1 + length(@participants)} personne(s)
                 </span>
               </div>
 
@@ -258,7 +257,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
               <%!-- Liste actuelle des participants --%>
               <div class="space-y-2">
                 <label class="text-xs font-semibold text-base-content/70 uppercase tracking-wider">
-                  Membres du groupe
+                  Membres et personnes à inviter
                 </label>
 
                 <%!-- Propriétaire (Créateur) verrouillé (IF-36) --%>
@@ -282,7 +281,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                   <span class="text-xs font-medium text-primary">Propriétaire</span>
                 </div>
 
-                <%!-- Autres participants ajoutés (IF-29) --%>
+                <%!-- Participants en attente d'envoi d'invitation (IF-29, IF-38) --%>
                 <div id="participants-list" class="space-y-2">
                   <%= for participant <- @participants do %>
                     <div
@@ -295,6 +294,10 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                           <div class="font-semibold text-sm text-base-content flex items-center gap-2">
                             <span>{participant.name}</span>
                             <.member_badge is_owner={false} />
+                            <span class="badge badge-warning badge-xs gap-1">
+                              <.icon name="hero-envelope" class="size-2.5" />
+                              <span>Invitation à envoyer</span>
+                            </span>
                           </div>
                           <%= if participant.email do %>
                             <div class="text-xs text-base-content/60">{participant.email}</div>
@@ -317,11 +320,14 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                 </div>
               </div>
 
-              <div class="divider my-2 text-xs text-base-content/50">Ajouter des personnes</div>
+              <div class="divider my-2 text-xs text-base-content/50">
+                Sélectionner des personnes à inviter
+              </div>
 
               <.participant_selector
                 available_users={@available_users}
                 custom_email={@custom_email}
+                button_label="Ajouter aux invités"
               />
             </div>
           </div>

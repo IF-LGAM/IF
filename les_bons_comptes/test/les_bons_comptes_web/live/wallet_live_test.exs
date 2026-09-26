@@ -244,13 +244,13 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(show_view, "#owner-name")
       assert element(show_view, "#owner-name") |> render() =~ "Sophie"
 
-      # Vérification des participants associés (IF-30) : 3 membres (Sophie, Lucas, Marc)
-      assert element(show_view, "#members-count") |> render() =~ "3"
+      # Vérification des participants (IF-30, IF-37) :
+      # Le créateur est le membre initial, Lucas et Marc ont reçu une invitation en attente d'acceptation
+      assert element(show_view, "#members-count") |> render() =~ "1"
       assert html =~ "Sophie"
+      assert html =~ "Invitations envoyées"
       assert html =~ "Lucas"
       assert html =~ "Marc"
-      assert html =~ "Inscrit"
-      refute html =~ "Externe"
     end
   end
 
@@ -367,38 +367,53 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
     end
   end
 
-  describe "Gestion des membres dans l'interface" do
-    test "le propriétaire peut ajouter un utilisateur inscrit via suggestion ou email et en retirer un depuis l'édition",
+  describe "Gestion des membres et invitations dans l'interface (IF-38, IF-39, IF-43)" do
+    test "le propriétaire peut inviter un utilisateur inscrit via suggestion ou email, annuler une invitation et retirer un membre",
          %{conn: conn} do
       owner = create_user(%{name: "Proprio"})
       registered_user = create_user(%{name: "Inscrit Nouveau", email: "inscrit@test.com"})
       _manual_user = create_user(%{name: "Ami Manuel", email: "manuel@test.com"})
-      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Vacances"})
+      existing_member = create_user(%{name: "Membre Actuel", email: "actuel@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Vacances"}, [
+          %{name: existing_member.name, email: existing_member.email, user_id: existing_member.id}
+        ])
+
       conn = authenticate_user(conn, owner)
 
       {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/edit")
 
-      # 1. Ajout d'un utilisateur inscrit
+      # 1. Envoi d'une invitation à un utilisateur inscrit depuis les suggestions (IF-38, IF-40, IF-42, IF-43)
       assert has_element?(edit_view, "#add-user-btn-#{registered_user.id}")
 
       edit_view
       |> element("#add-user-btn-#{registered_user.id}")
       |> render_click()
 
+      assert render(edit_view) =~ "Invitation envoyée avec succès à Inscrit Nouveau"
+      assert has_element?(edit_view, "#pending-invitations-list")
       assert render(edit_view) =~ "Inscrit Nouveau"
-      assert render(edit_view) =~ "Inscrit"
-      refute render(edit_view) =~ "Externe"
+      assert render(edit_view) =~ "Invitation envoyée"
 
-      # 2. Ajout d'un ami inscrit par son adresse email
+      # 2. Envoi d'une invitation manuellement par email (IF-39)
       edit_view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "manuel@test.com"})
 
+      assert render(edit_view) =~ "Invitation envoyée avec succès à Ami Manuel"
       assert render(edit_view) =~ "Ami Manuel"
-      assert render(edit_view) =~ "Inscrit"
-      refute render(edit_view) =~ "Externe"
 
-      # 3. Retrait d'un membre
+      # 3. Annulation d'une invitation en attente
+      [invitation | _] = Wallets.list_pending_invitations_for_wallet(wallet.id)
+
+      edit_view
+      |> element("#cancel-invitation-btn-#{invitation.id}")
+      |> render_click()
+
+      assert render(edit_view) =~ "invitation a été annulée"
+
+      # 4. Retrait d'un membre déjà actif
       [_, registered_member | _] = Wallets.get_wallet!(wallet.id).members
 
       edit_view
@@ -433,6 +448,123 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       # L'utilisateur ne fait plus partie des membres
       wallet_members = Wallets.get_wallet!(wallet.id).members
       refute Enum.any?(wallet_members, &(&1.user_id == member_user.id))
+    end
+  end
+
+  describe "IF-44 & IF-45 : Acceptation ou refus d'invitation" do
+    test "l'utilisateur peut accepter une invitation, rejoindre le porte-monnaie et le voir dans sa liste",
+         %{conn: conn} do
+      owner = create_user(%{name: "Organisateur"})
+      invitee = create_user(%{name: "Invité Récepteur", email: "recepteur@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Festival 2026", currency: "EUR"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "recepteur@test.com"})
+
+      conn = authenticate_user(conn, invitee)
+
+      {:ok, view, _html} = live(conn, ~p"/wallets")
+
+      # 1. Vérification de l'affichage de l'invitation reçue (IF-44)
+      assert has_element?(view, "#pending-invitations-section")
+      assert has_element?(view, "#invitation-card-#{invitation.id}")
+      assert render(view) =~ "Festival 2026"
+      assert render(view) =~ "Organisateur"
+
+      # 2. Clic sur Accepter (IF-44, IF-45)
+      view
+      |> element("#accept-invitation-btn-#{invitation.id}")
+      |> render_click()
+
+      assert render(view) =~ "Vous avez rejoint le porte-monnaie avec succès"
+      refute has_element?(view, "#invitation-card-#{invitation.id}")
+
+      # Le porte-monnaie apparaît désormais dans ses porte-monnaies
+      assert has_element?(view, "#wallet-card-#{wallet.id}")
+      assert render(view) =~ "Festival 2026"
+
+      # L'utilisateur est bien enregistré en base comme membre du groupe (IF-45)
+      wallet_members = Wallets.get_wallet!(wallet.id).members
+      assert Enum.any?(wallet_members, &(&1.user_id == invitee.id))
+    end
+
+    test "l'utilisateur peut refuser une invitation sans rejoindre le groupe", %{conn: conn} do
+      owner = create_user(%{name: "Organisateur"})
+      invitee = create_user(%{name: "Refusant", email: "refus@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Ski 2026", currency: "EUR"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "refus@test.com"})
+
+      conn = authenticate_user(conn, invitee)
+
+      {:ok, view, _html} = live(conn, ~p"/wallets")
+
+      assert has_element?(view, "#invitation-card-#{invitation.id}")
+
+      # Clic sur Refuser
+      view
+      |> element("#decline-invitation-btn-#{invitation.id}")
+      |> render_click()
+
+      assert render(view) =~ "Vous avez refusé"
+      refute has_element?(view, "#invitation-card-#{invitation.id}")
+      refute has_element?(view, "#wallet-card-#{wallet.id}")
+
+      # N'est pas ajouté comme membre
+      wallet_members = Wallets.get_wallet!(wallet.id).members
+      refute Enum.any?(wallet_members, &(&1.user_id == invitee.id))
+    end
+
+    test "le propriétaire voit le statut Refusée lorsqu'un invité a décliné l'invitation", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Propriétaire"})
+      invitee = create_user(%{name: "Paul Refus", email: "paul@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Soirée"})
+
+      {:ok, invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "paul@test.com"})
+
+      # L'invité décline
+      {:ok, _} = Wallets.decline_invitation(invitee, invitation.id)
+
+      # Le propriétaire consulte la page d'édition
+      conn = authenticate_user(conn, owner)
+      {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/edit")
+
+      assert render(edit_view) =~ "Paul Refus"
+      assert render(edit_view) =~ "Refusée"
+      assert has_element?(edit_view, "#cancel-invitation-btn-#{invitation.id}")
+
+      # Le propriétaire consulte la page show
+      {:ok, show_view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+      assert render(show_view) =~ "Paul Refus"
+      assert render(show_view) =~ "Refusée"
+    end
+
+    test "la cloche de notification affiche le nombre d'invitations reçues dans la navbar", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Amis Groupe"})
+      user = create_user(%{name: "Receveur Notif", email: "notif@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Anniversaire"})
+
+      {:ok, _invitation} =
+        Wallets.create_invitation(owner, wallet, %{email: "notif@test.com"})
+
+      conn = authenticate_user(conn, user)
+      {:ok, view, _html} = live(conn, ~p"/wallets")
+
+      # Présence de la cloche de notification et de son badge
+      assert has_element?(view, "#notifications-bell-btn")
+      assert has_element?(view, "#notifications-count-badge")
+      assert element(view, "#notifications-count-badge") |> render() =~ "1"
+
+      # Contenu du menu déroulant
+      assert has_element?(view, "#notifications-dropdown-menu")
+      assert render(view) =~ "Anniversaire"
+      assert render(view) =~ "Amis Groupe"
     end
   end
 end

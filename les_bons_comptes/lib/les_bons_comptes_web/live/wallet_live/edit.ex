@@ -79,13 +79,8 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
     current_user = socket.assigns.current_user
     wallet = socket.assigns.wallet
 
-    case Wallets.add_member(current_user, wallet, %{
-           user_id: user.id,
-           name: user.name,
-           email: user.email,
-           role: "member"
-         }) do
-      {:ok, _member} ->
+    case Wallets.create_invitation(current_user, wallet, %{email: user.email}) do
+      {:ok, invitation} ->
         updated_wallet = Wallets.get_wallet!(wallet.id)
         available_users = compute_available_users(updated_wallet, current_user)
 
@@ -94,7 +89,13 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
          |> assign(:wallet, updated_wallet)
          |> assign(:available_users, available_users)
          |> assign(:participant_error, nil)
-         |> put_flash(:info, "#{user.name} a été ajouté au porte-monnaie.")}
+         |> put_flash(
+           :info,
+           "Invitation envoyée avec succès à #{invitation.invitee.name} (#{invitation.invitee.email})."
+         )}
+
+      {:error, reason} when is_binary(reason) ->
+        {:noreply, assign(socket, :participant_error, reason)}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         error_msg =
@@ -114,39 +115,56 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
     current_user = socket.assigns.current_user
     wallet = socket.assigns.wallet
 
-    case Wallets.validate_new_participant(wallet.members, current_user, email) do
-      {:ok, user} ->
-        case Wallets.add_member(current_user, wallet, %{
-               user_id: user.id,
-               name: user.name,
-               email: user.email,
-               role: "member"
-             }) do
-          {:ok, _member} ->
-            updated_wallet = Wallets.get_wallet!(wallet.id)
-            available_users = compute_available_users(updated_wallet, current_user)
+    case Wallets.create_invitation(current_user, wallet, %{email: email}) do
+      {:ok, invitation} ->
+        updated_wallet = Wallets.get_wallet!(wallet.id)
+        available_users = compute_available_users(updated_wallet, current_user)
 
-            {:noreply,
-             socket
-             |> assign(:wallet, updated_wallet)
-             |> assign(:available_users, available_users)
-             |> assign(:custom_email, "")
-             |> assign(:participant_error, nil)
-             |> put_flash(:info, "#{user.name} a été ajouté au porte-monnaie.")}
+        {:noreply,
+         socket
+         |> assign(:wallet, updated_wallet)
+         |> assign(:available_users, available_users)
+         |> assign(:custom_email, "")
+         |> assign(:participant_error, nil)
+         |> put_flash(
+           :info,
+           "Invitation envoyée avec succès à #{invitation.invitee.name} (#{invitation.invitee.email})."
+         )}
 
-          {:error, %Ecto.Changeset{} = changeset} ->
-            error_msg =
-              Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
-              |> Enum.map_join(", ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
-
-            {:noreply, assign(socket, :participant_error, error_msg)}
-
-          {:error, :unauthorized} ->
-            {:noreply, put_flash(socket, :error, "Action non autorisée.")}
-        end
-
-      {:error, reason} ->
+      {:error, reason} when is_binary(reason) ->
         {:noreply, assign(socket, :participant_error, reason)}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        error_msg =
+          Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
+          |> Enum.map_join(", ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
+
+        {:noreply, assign(socket, :participant_error, error_msg)}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Action non autorisée.")}
+    end
+  end
+
+  @impl true
+  def handle_event("cancel_invitation", %{"id" => id_str}, socket) do
+    invitation_id = String.to_integer(id_str)
+    current_user = socket.assigns.current_user
+    wallet = socket.assigns.wallet
+
+    case Wallets.cancel_invitation(current_user, invitation_id) do
+      {:ok, _invitation} ->
+        updated_wallet = Wallets.get_wallet!(wallet.id)
+        available_users = compute_available_users(updated_wallet, current_user)
+
+        {:noreply,
+         socket
+         |> assign(:wallet, updated_wallet)
+         |> assign(:available_users, available_users)
+         |> put_flash(:info, "L'invitation a été annulée avec succès.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Impossible d'annuler cette invitation.")}
     end
   end
 
@@ -209,8 +227,15 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
       |> Enum.map(& &1.user_id)
       |> Enum.reject(&is_nil/1)
 
+    pending_invitee_ids =
+      wallet.invitations
+      |> Enum.map(& &1.invitee_id)
+      |> Enum.reject(&is_nil/1)
+
+    excluded_ids = [current_user.id | existing_user_ids ++ pending_invitee_ids]
+
     Accounts.list_users()
-    |> Enum.reject(fn u -> u.id == current_user.id or u.id in existing_user_ids end)
+    |> Enum.reject(fn u -> u.id in excluded_ids end)
   end
 
   @impl true
@@ -271,17 +296,17 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
           </div>
         </.form>
 
-        <%!-- Gestion des Membres / Participants --%>
+        <%!-- Gestion des Membres / Participants & Invitations (IF-38, IF-39, IF-43) --%>
         <div class="card bg-base-100 shadow-xl border border-base-200">
           <div class="card-body p-6 sm:p-8 space-y-5">
             <div class="flex items-center justify-between">
               <div>
                 <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
                   <.icon name="hero-user-group" class="size-5 text-primary" />
-                  <span>2. Gestion des participants ({length(@wallet.members)})</span>
+                  <span>2. Participants et invitations ({length(@wallet.members)})</span>
                 </h2>
                 <p class="text-xs text-base-content/60 mt-0.5">
-                  Ajoutez ou retirez des membres du porte-monnaie.
+                  Consultez les membres actifs et invitez de nouveaux participants.
                 </p>
               </div>
             </div>
@@ -296,51 +321,119 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
               <span>{@participant_error}</span>
             </div>
 
-            <%!-- Liste des membres existants --%>
-            <div id="edit-members-list" class="space-y-2">
-              <%= for member <- @wallet.members do %>
-                <div
-                  id={"edit-member-item-#{member.id}"}
-                  class="flex items-center justify-between p-3 rounded-xl bg-base-200/50 border border-base-200"
-                >
-                  <div class="flex items-center gap-3">
-                    <.member_avatar name={member.name} is_owner={member.role == "owner"} />
-                    <div>
-                      <div class="font-semibold text-sm text-base-content flex items-center gap-2">
-                        <span>{member.name}</span>
-                        <.member_badge role={member.role} />
-                      </div>
-                      <div :if={member.email} class="text-xs text-base-content/60">
-                        {member.email}
+            <%!-- Liste des membres confirmés --%>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-base-content/70 uppercase tracking-wider">
+                Membres actifs ({length(@wallet.members)})
+              </label>
+
+              <div id="edit-members-list" class="space-y-2">
+                <%= for member <- @wallet.members do %>
+                  <div
+                    id={"edit-member-item-#{member.id}"}
+                    class="flex items-center justify-between p-3 rounded-xl bg-base-200/50 border border-base-200"
+                  >
+                    <div class="flex items-center gap-3">
+                      <.member_avatar name={member.name} is_owner={member.role == "owner"} />
+                      <div>
+                        <div class="font-semibold text-sm text-base-content flex items-center gap-2">
+                          <span>{member.name}</span>
+                          <.member_badge role={member.role} />
+                        </div>
+                        <div :if={member.email} class="text-xs text-base-content/60">
+                          {member.email}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <%= if member.role != "owner" do %>
-                    <button
-                      type="button"
-                      id={"remove-member-btn-#{member.id}"}
-                      phx-click="remove_member"
-                      phx-value-id={member.id}
-                      data-confirm={"Êtes-vous sûr de vouloir retirer #{member.name} du porte-monnaie ?"}
-                      class="btn btn-ghost btn-circle btn-sm text-error hover:bg-error/10"
-                      title="Retirer ce membre"
-                    >
-                      <.icon name="hero-trash" class="size-4" />
-                    </button>
-                  <% else %>
-                    <span class="text-xs text-base-content/40 italic px-2">Non retirable</span>
-                  <% end %>
-                </div>
-              <% end %>
+                    <%= if member.role != "owner" do %>
+                      <button
+                        type="button"
+                        id={"remove-member-btn-#{member.id}"}
+                        phx-click="remove_member"
+                        phx-value-id={member.id}
+                        data-confirm={"Êtes-vous sûr de vouloir retirer #{member.name} du porte-monnaie ?"}
+                        class="btn btn-ghost btn-circle btn-sm text-error hover:bg-error/10"
+                        title="Retirer ce membre"
+                      >
+                        <.icon name="hero-trash" class="size-4" />
+                      </button>
+                    <% else %>
+                      <span class="text-xs text-base-content/40 italic px-2">Non retirable</span>
+                    <% end %>
+                  </div>
+                <% end %>
+              </div>
             </div>
 
-            <div class="divider my-2 text-xs text-base-content/50">Ajouter un participant</div>
+            <%!-- Liste des invitations envoyées (IF-43) --%>
+            <div :if={@wallet.invitations != []} class="space-y-2 pt-2">
+              <label class="text-xs font-semibold text-base-content/70 uppercase tracking-wider flex items-center gap-1.5">
+                <.icon name="hero-envelope" class="size-4 text-primary" />
+                <span>Invitations envoyées ({length(@wallet.invitations)})</span>
+              </label>
+
+              <div id="pending-invitations-list" class="space-y-2">
+                <%= for invitation <- @wallet.invitations do %>
+                  <div
+                    id={"pending-invitation-#{invitation.id}"}
+                    class={[
+                      "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                      if(invitation.status == "declined",
+                        do: "bg-error/5 border-error/20",
+                        else: "bg-warning/5 border-warning/20"
+                      )
+                    ]}
+                  >
+                    <div class="flex items-center gap-3">
+                      <.member_avatar name={invitation.invitee.name} is_owner={false} />
+                      <div>
+                        <div class="font-semibold text-sm text-base-content flex items-center gap-2">
+                          <span>{invitation.invitee.name}</span>
+                          <.invitation_badge status={invitation.status} />
+                        </div>
+                        <div class="text-xs text-base-content/60">
+                          {invitation.email}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      id={"cancel-invitation-btn-#{invitation.id}"}
+                      phx-click="cancel_invitation"
+                      phx-value-id={invitation.id}
+                      data-confirm={
+                        if(invitation.status == "declined",
+                          do: "Retirer cette invitation refusée ?",
+                          else:
+                            "Êtes-vous sûr de vouloir annuler l'invitation envoyée à #{invitation.invitee.name} ?"
+                        )
+                      }
+                      class="btn btn-ghost btn-xs text-error hover:bg-error/10 gap-1"
+                      title={
+                        if(invitation.status == "declined",
+                          do: "Retirer",
+                          else: "Annuler l'invitation"
+                        )
+                      }
+                    >
+                      <.icon name="hero-trash" class="size-3.5" />
+                      <span>{if(invitation.status == "declined", do: "Retirer", else: "Annuler")}</span>
+                    </button>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+
+            <div class="divider my-2 text-xs text-base-content/50">
+              Inviter un nouveau participant
+            </div>
 
             <.participant_selector
               available_users={@available_users}
               custom_email={@custom_email}
-              button_label="Ajouter au porte-monnaie"
+              button_label="Envoyer l'invitation"
             />
           </div>
         </div>
