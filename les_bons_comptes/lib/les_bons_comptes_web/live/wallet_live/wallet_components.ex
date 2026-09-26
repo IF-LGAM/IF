@@ -193,4 +193,49 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     </div>
     """
   end
+
+  @doc """
+  Formate un montant monétaire avec 2 décimales.
+  """
+  def format_amount(%Decimal{} = decimal) do
+    :erlang.float_to_binary(Decimal.to_float(decimal), decimals: 2)
+  end
+
+  def format_amount(num) when is_number(num) do
+    :erlang.float_to_binary(num / 1.0, decimals: 2)
+  end
+
+  def format_amount(_), do: "0.00"
+
+  @doc """
+  Composant d'affichage d'un élément de dépense dans une liste.
+  """
+  attr :expense, :map, required: true
+
+  def expense_item(assigns) do
+    ~H"""
+    <div id={"expense-item-#{@expense.id}"} class="py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <.member_avatar name={@expense.payer.name} size="size-10" />
+        <div>
+          <div class="font-semibold text-sm text-base-content flex items-center gap-2">
+            <span>{@expense.title}</span>
+          </div>
+          <div class="text-xs text-base-content/60 flex items-center gap-1.5 mt-0.5">
+            <span>Payé par <strong class="text-base-content/80">{@expense.payer.name}</strong></span>
+            <span>•</span>
+            <span>{Calendar.strftime(@expense.date, "%d/%m/%Y")}</span>
+            <span :if={@expense.description} class="italic">• {@expense.description}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-right">
+        <span class="text-base font-bold text-primary">
+          {format_amount(@expense.amount)} {@expense.currency}
+        </span>
+      </div>
+    </div>
+    """
+  end
 end

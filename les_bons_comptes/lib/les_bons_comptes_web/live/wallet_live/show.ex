@@ -2,16 +2,21 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
   use LesBonsComptesWeb, :live_view
 
   import LesBonsComptesWeb.WalletLive.WalletComponents
+  alias LesBonsComptes.Expenses
   alias LesBonsComptes.Wallets
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     wallet = Wallets.get_wallet!(id)
+    total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
+    expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
 
     {:ok,
      socket
      |> assign(:page_title, "#{wallet.name} - Les Bons Comptes")
-     |> assign(:wallet, wallet)}
+     |> assign(:wallet, wallet)
+     |> assign(:total_expenses, total_expenses)
+     |> assign(:expenses_by_member, expenses_by_member)}
   end
 
   @impl true
@@ -101,10 +106,16 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               </div>
 
               <div class="flex flex-wrap items-center gap-2">
-                <span class="badge badge-success badge-sm gap-1 py-3 px-3">
-                  <.icon name="hero-check-circle" class="size-4" />
-                  <span>Porte-monnaie actif</span>
-                </span>
+                <%= if @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
+                  <.link
+                    navigate={~p"/wallets/#{@wallet.id}/expenses/new"}
+                    id="add-expense-btn"
+                    class="btn btn-primary btn-sm gap-1.5 shadow-sm"
+                  >
+                    <.icon name="hero-plus-circle" class="size-4" />
+                    <span>Ajouter une dépense</span>
+                  </.link>
+                <% end %>
 
                 <%= if @current_user && @current_user.id == @wallet.creator_id do %>
                   <.link
@@ -149,8 +160,16 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div class="bg-base-200/50 p-4 rounded-xl border border-base-200">
                 <div class="text-xs font-semibold text-base-content/60 uppercase">Total Dépenses</div>
-                <div class="text-2xl font-bold text-base-content mt-1">0,00 {@wallet.currency}</div>
-                <div class="text-xs text-base-content/50 mt-0.5">Aucune dépense pour le moment</div>
+                <div id="total-expenses-amount" class="text-2xl font-bold text-base-content mt-1">
+                  {format_amount(@total_expenses)} {@wallet.currency}
+                </div>
+                <div class="text-xs text-base-content/50 mt-0.5">
+                  <%= if length(@wallet.expenses) == 0 do %>
+                    Aucune dépense pour le moment
+                  <% else %>
+                    {length(@wallet.expenses)} dépense(s) enregistrée(s)
+                  <% end %>
+                </div>
               </div>
 
               <div class="bg-base-200/50 p-4 rounded-xl border border-base-200">
@@ -173,6 +192,60 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                 <div class="text-xs text-base-content/50 mt-0.5">{@wallet.creator.email}</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <%!-- Dépenses du groupe (IF-62, IF-65, IF-66) --%>
+        <div class="card bg-base-100 shadow-xl border border-base-200">
+          <div class="card-body p-6 sm:p-8 space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
+                <.icon name="hero-banknotes" class="size-5 text-primary" />
+                <span>Dépenses ({length(@wallet.expenses)})</span>
+              </h2>
+
+              <%= if @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
+                <.link
+                  navigate={~p"/wallets/#{@wallet.id}/expenses/new"}
+                  id="section-add-expense-btn"
+                  class="btn btn-primary btn-xs gap-1 shadow-sm"
+                >
+                  <.icon name="hero-plus" class="size-3.5" />
+                  <span>Ajouter une dépense</span>
+                </.link>
+              <% end %>
+            </div>
+
+            <%= if @wallet.expenses == [] do %>
+              <div
+                id="no-expenses-message"
+                class="text-center py-8 text-base-content/60 bg-base-200/30 rounded-xl border border-dashed border-base-300 space-y-2"
+              >
+                <.icon name="hero-banknotes" class="size-8 mx-auto text-base-content/30" />
+                <p class="font-medium text-sm">Aucune dépense enregistrée</p>
+                <p class="text-xs">
+                  Chaque membre du groupe peut déclarer ses dépenses et elles lui sont directement affectées.
+                </p>
+                <%= if @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
+                  <div class="pt-2">
+                    <.link
+                      navigate={~p"/wallets/#{@wallet.id}/expenses/new"}
+                      id="empty-state-add-expense-btn"
+                      class="btn btn-primary btn-xs gap-1"
+                    >
+                      <.icon name="hero-plus" class="size-3.5" />
+                      <span>Déclarer ma première dépense</span>
+                    </.link>
+                  </div>
+                <% end %>
+              </div>
+            <% else %>
+              <div id="wallet-expenses-list" class="divide-y divide-base-200">
+                <%= for expense <- @wallet.expenses do %>
+                  <.expense_item expense={expense} />
+                <% end %>
+              </div>
+            <% end %>
           </div>
         </div>
 
@@ -218,8 +291,10 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                   </div>
 
                   <div class="text-right">
-                    <span class="text-sm font-semibold text-base-content/80">0,00 {@wallet.currency}</span>
-                    <div class="text-xs text-base-content/50">Équilibré</div>
+                    <span class="text-sm font-semibold text-base-content/80">
+                      {format_amount(Map.get(@expenses_by_member, member.id, Decimal.new("0.00")))} {@wallet.currency}
+                    </span>
+                    <div class="text-xs text-base-content/50">Dépensé</div>
                   </div>
                 </div>
               <% end %>
