@@ -52,7 +52,9 @@ defmodule LesBonsComptesWeb.SignUpLiveTest do
     assert redirected_to(conn) == ~p"/"
   end
 
-  test "displays 'Un compte existe déjà' error below submit button when email is taken", %{conn: conn} do
+  test "displays 'Un compte existe déjà' error below submit button when email is taken", %{
+    conn: conn
+  } do
     {:ok, _existing_user} =
       Accounts.create_user(%{
         name: "Existant",
@@ -64,22 +66,26 @@ defmodule LesBonsComptesWeb.SignUpLiveTest do
 
     # Vérification à la frappe / blur (phx-change) : aucune vérification d'unicité en DB à ce stade
     view
-    |> form("#user-sign-up-form", user: %{
-      name: "Nouveau",
-      email: "deja.pris@exemple.com",
-      password: "password123"
-    })
+    |> form("#user-sign-up-form",
+      user: %{
+        name: "Nouveau",
+        email: "deja.pris@exemple.com",
+        password: "password123"
+      }
+    )
     |> render_change()
 
     refute has_element?(view, "#email-uniqueness-error")
 
     # Vérification à la soumission (phx-submit) : la contrainte DB se déclenche et affiche le message sous le bouton
     view
-    |> form("#user-sign-up-form", user: %{
-      name: "Nouveau",
-      email: "deja.pris@exemple.com",
-      password: "password123"
-    })
+    |> form("#user-sign-up-form",
+      user: %{
+        name: "Nouveau",
+        email: "deja.pris@exemple.com",
+        password: "password123"
+      }
+    )
     |> render_submit()
 
     assert has_element?(view, "#email-uniqueness-error", "Un compte existe déjà")

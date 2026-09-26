@@ -36,10 +36,28 @@
 
           <div class="pt-4 flex flex-col sm:flex-row gap-3 justify-center items-center">
             <.link
+              navigate={~p"/wallets/new"}
+              id="home-create-wallet-btn"
+              class="btn btn-primary w-full sm:w-auto gap-2"
+            >
+              <.icon name="hero-plus" class="size-5" />
+              <span>Créer un porte-monnaie</span>
+            </.link>
+
+            <.link
+              navigate={~p"/wallets"}
+              id="home-my-wallets-btn"
+              class="btn btn-outline w-full sm:w-auto gap-2"
+            >
+              <.icon name="hero-wallet" class="size-5" />
+              <span>Mes porte-monnaies</span>
+            </.link>
+
+            <.link
               href={~p"/users/log_out"}
               method="delete"
               id="disconnect-user-btn"
-              class="btn btn-outline btn-error w-full sm:w-auto gap-2"
+              class="btn btn-ghost btn-error w-full sm:w-auto gap-2"
             >
               <.icon name="hero-arrow-right-start-on-rectangle" class="size-5" />
               <span>Se déconnecter</span>

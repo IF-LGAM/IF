@@ -9,8 +9,7 @@ defmodule LesBonsComptesWeb.SignInLive do
     {:ok,
      socket
      |> assign(:page_title, "Connexion - Les Bons Comptes")
-     |> assign(:form, form),
-     temporary_assigns: [form: form]}
+     |> assign(:form, form), temporary_assigns: [form: form]}
   end
 
   @impl true
