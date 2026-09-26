@@ -209,20 +209,26 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
 
   @doc """
   Composant d'affichage d'un élément de dépense dans une liste.
+  Permet d'afficher l'action de suppression si autorisé (IF-81).
   """
   attr :expense, :map, required: true
+  attr :can_delete, :boolean, default: false
+  attr :delete_event, :string, default: "delete_expense"
 
   def expense_item(assigns) do
+    payer_name = (assigns.expense.payer && assigns.expense.payer.name) || "Inconnu"
+    assigns = assign(assigns, :payer_name, payer_name)
+
     ~H"""
-    <div id={"expense-item-#{@expense.id}"} class="py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <.member_avatar name={@expense.payer.name} size="size-10" />
-        <div>
-          <div class="font-semibold text-sm text-base-content flex items-center gap-2">
+    <div id={"expense-item-#{@expense.id}"} class="py-3 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <.member_avatar name={@payer_name} size="size-10" />
+        <div class="min-w-0">
+          <div class="font-semibold text-sm text-base-content flex items-center gap-2 truncate">
             <span>{@expense.title}</span>
           </div>
-          <div class="text-xs text-base-content/60 flex items-center gap-1.5 mt-0.5">
-            <span>Payé par <strong class="text-base-content/80">{@expense.payer.name}</strong></span>
+          <div class="text-xs text-base-content/60 flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span>Payé par <strong class="text-base-content/80">{@payer_name}</strong></span>
             <span>•</span>
             <span>{Calendar.strftime(@expense.date, "%d/%m/%Y")}</span>
             <span :if={@expense.description} class="italic">• {@expense.description}</span>
@@ -230,10 +236,24 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
         </div>
       </div>
 
-      <div class="text-right">
+      <div class="flex items-center gap-3 shrink-0">
         <span class="text-base font-bold text-primary">
           {format_amount(@expense.amount)} {@expense.currency}
         </span>
+
+        <%= if @can_delete do %>
+          <button
+            type="button"
+            id={"delete-expense-btn-#{@expense.id}"}
+            phx-click={@delete_event}
+            phx-value-id={@expense.id}
+            data-confirm={"Êtes-vous sûr de vouloir supprimer définitivement la dépense « #{@expense.title} » de #{format_amount(@expense.amount)} #{@expense.currency} ?"}
+            class="btn btn-ghost btn-circle btn-xs text-error hover:bg-error/10"
+            title="Supprimer cette dépense"
+          >
+            <.icon name="hero-trash" class="size-4" />
+          </button>
+        <% end %>
       </div>
     </div>
     """

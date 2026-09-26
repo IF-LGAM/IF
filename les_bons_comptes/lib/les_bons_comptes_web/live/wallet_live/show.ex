@@ -7,16 +7,12 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    wallet = Wallets.get_wallet!(id)
-    total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
-    expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+    data = load_wallet_data(id)
 
     {:ok,
      socket
-     |> assign(:page_title, "#{wallet.name} - Les Bons Comptes")
-     |> assign(:wallet, wallet)
-     |> assign(:total_expenses, total_expenses)
-     |> assign(:expenses_by_member, expenses_by_member)}
+     |> assign(:page_title, "#{data.wallet.name} - Les Bons Comptes")
+     |> assign(data)}
   end
 
   @impl true
@@ -63,6 +59,46 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
          socket
          |> put_flash(:error, "Impossible de quitter ce porte-monnaie.")}
     end
+  end
+
+  @impl true
+  def handle_event("delete_expense", %{"id" => id_str}, socket) do
+    current_user = socket.assigns.current_user
+    wallet = socket.assigns.wallet
+    expense_id = String.to_integer(id_str)
+
+    case Expenses.delete_expense(current_user, expense_id) do
+      {:ok, deleted_expense} ->
+        {:noreply,
+         socket
+         |> assign(load_wallet_data(wallet.id))
+         |> put_flash(
+           :info,
+           "La dépense « #{deleted_expense.title} » a été supprimée avec succès."
+         )}
+
+      {:error, :unauthorized} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Vous n'êtes pas autorisé à supprimer cette dépense.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Impossible de supprimer cette dépense.")}
+    end
+  end
+
+  defp load_wallet_data(wallet_id) do
+    wallet = Wallets.get_wallet!(wallet_id)
+    total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
+    expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+
+    %{
+      wallet: wallet,
+      total_expenses: total_expenses,
+      expenses_by_member: expenses_by_member
+    }
   end
 
   @impl true
@@ -242,7 +278,10 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
             <% else %>
               <div id="wallet-expenses-list" class="divide-y divide-base-200">
                 <%= for expense <- @wallet.expenses do %>
-                  <.expense_item expense={expense} />
+                  <.expense_item
+                    expense={expense}
+                    can_delete={Expenses.can_delete_expense?(@current_user, expense)}
+                  />
                 <% end %>
               </div>
             <% end %>

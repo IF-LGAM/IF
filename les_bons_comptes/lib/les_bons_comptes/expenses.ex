@@ -141,15 +141,38 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Supprime une dépense si l'utilisateur est le créateur de la dépense ou le propriétaire du porte-monnaie.
+  Vérifie si un utilisateur a le droit de supprimer une dépense (IF-77, IF-79).
+  Autorisé si l'utilisateur est :
+  - le créateur de la dépense (`created_by_id == user.id`),
+  - le compte dépenseur associé (`payer.user_id == user.id`),
+  - ou le propriétaire du porte-monnaie (`wallet.creator_id == user.id`).
+  """
+  def can_delete_expense?(%User{} = user, %Expense{} = expense) do
+    expense = Repo.preload(expense, [:wallet, :payer])
+
+    is_creator_of_expense = expense.created_by_id == user.id
+    is_payer_of_expense = expense.payer && expense.payer.user_id == user.id
+    is_wallet_owner = expense.wallet && expense.wallet.creator_id == user.id
+
+    is_creator_of_expense or is_payer_of_expense or is_wallet_owner
+  end
+
+  def can_delete_expense?(_, _), do: false
+
+  @doc """
+  Supprime une dépense après vérification des droits (IF-78, IF-79).
   """
   def delete_expense(%User{} = user, %Expense{} = expense) do
-    expense = Repo.preload(expense, [:wallet])
-
-    if expense.created_by_id == user.id or expense.wallet.creator_id == user.id do
+    if can_delete_expense?(user, expense) do
       Repo.delete(expense)
     else
       {:error, :unauthorized}
     end
+  end
+
+  def delete_expense(%User{} = user, expense_id)
+      when is_integer(expense_id) or is_binary(expense_id) do
+    expense = get_expense!(expense_id)
+    delete_expense(user, expense)
   end
 end

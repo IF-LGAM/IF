@@ -3,6 +3,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
   import Phoenix.LiveViewTest
   alias LesBonsComptes.Accounts
+  alias LesBonsComptes.Expenses
   alias LesBonsComptes.Wallets
 
   defp create_user(attrs) do
@@ -177,6 +178,100 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
         |> follow_redirect(conn, ~p"/wallets")
 
       assert html =~ "Vous devez être membre de ce porte-monnaie"
+    end
+  end
+
+  describe "Suppression d'une dépense (IF-77, IF-78, IF-79, IF-80, IF-81)" do
+    test "affiche le bouton de suppression pour le créateur de la dépense ou le propriétaire (IF-81)",
+         %{conn: conn} do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet()
+
+      # Bob crée une dépense
+      {:ok, expense} =
+        Expenses.create_expense(bob, wallet, %{title: "Courses tapas", amount: "35.00"})
+
+      # 1. Bob voit le bouton de suppression sur sa dépense
+      conn_bob = authenticate_user(conn, bob)
+      {:ok, view_bob, _html} = live(conn_bob, ~p"/wallets/#{wallet.id}")
+      assert has_element?(view_bob, "#delete-expense-btn-#{expense.id}")
+
+      # 2. Le propriétaire Alice voit aussi le bouton de suppression (IF-81)
+      conn_alice = authenticate_user(conn, creator)
+      {:ok, view_alice, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
+      assert has_element?(view_alice, "#delete-expense-btn-#{expense.id}")
+    end
+
+    test "masque le bouton de suppression pour un membre non autorisé (IF-81)", %{conn: conn} do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet()
+      charlie = create_user(%{name: "Charlie", email: "charlie@test.com"})
+
+      {:ok, _member} =
+        Wallets.add_member(creator, wallet, %{
+          name: "Charlie",
+          email: charlie.email,
+          user_id: charlie.id
+        })
+
+      # Bob crée une dépense
+      {:ok, expense} =
+        Expenses.create_expense(bob, wallet, %{title: "Cinéma", amount: "22.00"})
+
+      # Charlie (qui n'est ni le propriétaire Alice, ni le payeur/créateur Bob) ne voit pas le bouton
+      conn_charlie = authenticate_user(conn, charlie)
+      {:ok, view_charlie, _html} = live(conn_charlie, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view_charlie, "#expense-item-#{expense.id}")
+      refute has_element?(view_charlie, "#delete-expense-btn-#{expense.id}")
+    end
+
+    test "supprime la dépense avec confirmation et met à jour le total (IF-78, IF-80)", %{
+      conn: conn
+    } do
+      %{bob: bob, wallet: wallet} = setup_wallet()
+
+      {:ok, expense} =
+        Expenses.create_expense(bob, wallet, %{title: "Billets de bus", amount: "15.00"})
+
+      conn = authenticate_user(conn, bob)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#expense-item-#{expense.id}")
+      assert render(view) =~ "15.00 EUR"
+
+      # Déclenche la suppression
+      render_click(element(view, "#delete-expense-btn-#{expense.id}"))
+
+      # Notification flash affichée (IF-80)
+      assert render(view) =~ "La dépense « Billets de bus » a été supprimée avec succès."
+
+      # La dépense a disparu de la liste
+      refute has_element?(view, "#expense-item-#{expense.id}")
+      assert render(view) =~ "0.00 EUR"
+      assert has_element?(view, "#no-expenses-message")
+    end
+
+    test "rejette la suppression d'un membre non autorisé (IF-79)", %{conn: conn} do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet()
+      charlie = create_user(%{name: "Charlie", email: "charlie@test.com"})
+
+      {:ok, _member} =
+        Wallets.add_member(creator, wallet, %{
+          name: "Charlie",
+          email: charlie.email,
+          user_id: charlie.id
+        })
+
+      {:ok, expense} =
+        Expenses.create_expense(bob, wallet, %{title: "Pizza", amount: "18.00"})
+
+      conn_charlie = authenticate_user(conn, charlie)
+      {:ok, view_charlie, _html} = live(conn_charlie, ~p"/wallets/#{wallet.id}")
+
+      # Envoi direct de l'événement delete_expense par Charlie
+      render_click(view_charlie, "delete_expense", %{"id" => to_string(expense.id)})
+
+      assert render(view_charlie) =~ "pas autorisé à supprimer cette dépense"
+      assert Expenses.get_expense!(expense.id) != nil
     end
   end
 end
