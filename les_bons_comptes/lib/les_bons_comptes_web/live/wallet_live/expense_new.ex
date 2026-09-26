@@ -9,6 +9,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
   alias LesBonsComptes.Expenses
   alias LesBonsComptes.Expenses.Expense
   alias LesBonsComptes.Wallets
+  alias LesBonsComptesWeb.WalletLive.WalletComponents
 
   @impl true
   def mount(%{"id" => wallet_id}, _session, socket) do
@@ -86,7 +87,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
     case Expenses.create_expense(current_user, wallet, expense_params) do
       {:ok, expense} ->
         # Confirmation de déclaration de la dépense (IF-71)
-        amount_formatted = :erlang.float_to_binary(Decimal.to_float(expense.amount), decimals: 2)
+        amount_formatted = WalletComponents.format_amount(expense.amount)
 
         {:noreply,
          socket

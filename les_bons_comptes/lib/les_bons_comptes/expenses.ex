@@ -50,60 +50,18 @@ defmodule LesBonsComptes.Expenses do
     wallet = Repo.preload(wallet, [:members])
     user_member = Enum.find(wallet.members, &(&1.user_id == user.id))
 
-    cond do
-      is_nil(user_member) ->
-        {:error, :unauthorized}
+    if is_nil(user_member) do
+      {:error, :unauthorized}
+    else
+      payer_id = resolve_payer_id(attrs[:payer_id] || attrs["payer_id"], user_member.id)
 
-      true ->
-        raw_payer_id = attrs[:payer_id] || attrs["payer_id"]
-
-        payer_id =
-          case raw_payer_id do
-            nil ->
-              user_member.id
-
-            "" ->
-              user_member.id
-
-            id when is_binary(id) ->
-              String.to_integer(id)
-
-            id when is_integer(id) ->
-              id
-          end
-
-        # Vérifier que le payer_id appartient bien aux membres du wallet
-        payer = Enum.find(wallet.members, &(&1.id == payer_id))
-
-        if is_nil(payer) do
-          changeset =
-            %Expense{}
-            |> Expense.changeset(attrs)
-            |> Ecto.Changeset.add_error(
-              :payer_id,
-              "Le membre sélectionné ne fait pas partie de ce porte-monnaie"
-            )
-
-          {:error, changeset}
-        else
-          date =
-            case attrs[:date] || attrs["date"] do
-              nil -> Date.utc_today()
-              "" -> Date.utc_today()
-              val -> val
-            end
-
-          attrs_with_defaults =
-            attrs
-            |> Map.new(fn {k, v} -> {to_string(k), v} end)
-            |> Map.put("wallet_id", wallet.id)
-            |> Map.put("created_by_id", user.id)
-            |> Map.put("payer_id", payer_id)
-            |> Map.put("currency", wallet.currency)
-            |> Map.put("date", date)
+      case validate_payer_in_wallet(wallet, payer_id, attrs) do
+        :ok ->
+          date = resolve_date(attrs[:date] || attrs["date"])
+          params = build_expense_params(attrs, wallet, user, payer_id, date)
 
           %Expense{}
-          |> Expense.changeset(attrs_with_defaults)
+          |> Expense.changeset(params)
           |> Repo.insert()
           |> case do
             {:ok, expense} ->
@@ -112,8 +70,46 @@ defmodule LesBonsComptes.Expenses do
             {:error, changeset} ->
               {:error, changeset}
           end
-        end
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
     end
+  end
+
+  defp resolve_payer_id(nil, default_id), do: default_id
+  defp resolve_payer_id("", default_id), do: default_id
+  defp resolve_payer_id(id, _default_id) when is_integer(id), do: id
+  defp resolve_payer_id(id, _default_id) when is_binary(id), do: String.to_integer(id)
+
+  defp resolve_date(nil), do: Date.utc_today()
+  defp resolve_date(""), do: Date.utc_today()
+  defp resolve_date(val), do: val
+
+  defp validate_payer_in_wallet(wallet, payer_id, attrs) do
+    if Enum.any?(wallet.members, &(&1.id == payer_id)) do
+      :ok
+    else
+      changeset =
+        %Expense{}
+        |> Expense.changeset(attrs)
+        |> Ecto.Changeset.add_error(
+          :payer_id,
+          "Le membre sélectionné ne fait pas partie de ce porte-monnaie"
+        )
+
+      {:error, changeset}
+    end
+  end
+
+  defp build_expense_params(attrs, wallet, user, payer_id, date) do
+    attrs
+    |> Map.new(fn {k, v} -> {to_string(k), v} end)
+    |> Map.put("wallet_id", wallet.id)
+    |> Map.put("created_by_id", user.id)
+    |> Map.put("payer_id", payer_id)
+    |> Map.put("currency", wallet.currency)
+    |> Map.put("date", date)
   end
 
   @doc """
