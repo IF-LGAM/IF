@@ -176,4 +176,66 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Decimal.equal?(total, Decimal.new("80.50"))
     end
   end
+
+  describe "delete_expense/2 et can_delete_expense?/2 (IF-77, IF-78, IF-79)" do
+    test "le créateur de la dépense peut la supprimer" do
+      %{creator: _creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, expense} =
+        Expenses.create_expense(bob, wallet, %{title: "Restaurant", amount: "50.00"})
+
+      assert Expenses.can_delete_expense?(bob, expense)
+      assert {:ok, _deleted} = Expenses.delete_expense(bob, expense)
+      assert_raise Ecto.NoResultsError, fn -> Expenses.get_expense!(expense.id) end
+    end
+
+    test "le propriétaire du porte-monnaie peut supprimer n'importe quelle dépense du groupe" do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, expense} =
+        Expenses.create_expense(bob, wallet, %{title: "Taxi", amount: "20.00"})
+
+      assert Expenses.can_delete_expense?(creator, expense)
+      assert {:ok, _deleted} = Expenses.delete_expense(creator, expense)
+      assert_raise Ecto.NoResultsError, fn -> Expenses.get_expense!(expense.id) end
+    end
+
+    test "le membre dépenseur peut supprimer la dépense même créée par un autre" do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      # Le créateur Alice crée la dépense pour le compte dépenseur de Bob
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{
+          title: "Cadeau",
+          amount: "30.00",
+          payer_id: bob_member.id
+        })
+
+      assert Expenses.can_delete_expense?(bob, expense)
+      assert {:ok, _deleted} = Expenses.delete_expense(bob, expense)
+    end
+
+    test "un autre membre ne peut pas supprimer la dépense (IF-79)" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      charlie_user = create_user(%{name: "Charlie"})
+
+      {:ok, _member} =
+        Wallets.add_member(creator, wallet, %{
+          name: "Charlie",
+          email: charlie_user.email,
+          user_id: charlie_user.id
+        })
+
+      wallet = Wallets.get_wallet!(wallet.id)
+
+      # Alice crée une dépense
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "60.00"})
+
+      # Charlie tente de la supprimer
+      refute Expenses.can_delete_expense?(charlie_user, expense)
+      assert {:error, :unauthorized} = Expenses.delete_expense(charlie_user, expense)
+    end
+  end
 end

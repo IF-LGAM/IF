@@ -66,6 +66,40 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
   end
 
   @impl true
+  def handle_event("delete_expense", %{"id" => id_str}, socket) do
+    current_user = socket.assigns.current_user
+    wallet = socket.assigns.wallet
+    expense_id = String.to_integer(id_str)
+
+    case Expenses.delete_expense(current_user, expense_id) do
+      {:ok, deleted_expense} ->
+        updated_wallet = Wallets.get_wallet!(wallet.id)
+        total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
+        expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+
+        {:noreply,
+         socket
+         |> assign(:wallet, updated_wallet)
+         |> assign(:total_expenses, total_expenses)
+         |> assign(:expenses_by_member, expenses_by_member)
+         |> put_flash(
+           :info,
+           "La dépense « #{deleted_expense.title} » a été supprimée avec succès."
+         )}
+
+      {:error, :unauthorized} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Vous n'êtes pas autorisé à supprimer cette dépense.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Impossible de supprimer cette dépense.")}
+    end
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
@@ -242,7 +276,10 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
             <% else %>
               <div id="wallet-expenses-list" class="divide-y divide-base-200">
                 <%= for expense <- @wallet.expenses do %>
-                  <.expense_item expense={expense} />
+                  <.expense_item
+                    expense={expense}
+                    can_delete={Expenses.can_delete_expense?(@current_user, expense)}
+                  />
                 <% end %>
               </div>
             <% end %>
