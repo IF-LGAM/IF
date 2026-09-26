@@ -3,6 +3,7 @@ defmodule LesBonsComptesWeb.SignInLive do
 
   alias LesBonsComptes.Accounts
   alias LesBonsComptes.Accounts.User
+  alias LesBonsComptesWeb.UserAuth
 
   @impl true
   def mount(_params, _session, socket) do
@@ -30,14 +31,13 @@ defmodule LesBonsComptesWeb.SignInLive do
   def handle_event("save", %{"user" => user_params}, socket) do
     case Accounts.create_user(user_params) do
       {:ok, user} ->
-        # Formulaire réinitialisé après succès
-        new_changeset = Accounts.change_user(%User{})
+        # Génération du token sécurisé et initialisation immédiate de la session (IF-27)
+        token = UserAuth.sign_user_token(user.id)
 
         {:noreply,
          socket
-         |> stream_insert(:users, user, at: 0)
-         |> assign(:form, to_form(new_changeset))
-         |> put_flash(:info, "Utilisateur « #{user.name} » ajouté en base avec succès !")}
+         |> put_flash(:info, "Compte créé avec succès ! Initialisation de votre session...")
+         |> redirect(to: ~p"/users/log_in?token=#{token}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -47,7 +47,7 @@ defmodule LesBonsComptesWeb.SignInLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-xl mx-auto space-y-8">
         <%!-- En-tête de la page --%>
         <div class="text-center space-y-2">
@@ -60,7 +60,7 @@ defmodule LesBonsComptesWeb.SignInLive do
           <p class="text-sm text-base-content/70">
             Page accessible sur
             <span class="font-mono bg-base-200 px-2 py-0.5 rounded text-primary font-semibold">/sign-in</span>
-            — L'utilisateur sera directement persisté dans la base PostgreSQL.
+            — L'utilisateur sera directement persisté dans la base PostgreSQL avec mot de passe haché.
           </p>
         </div>
 
@@ -105,7 +105,7 @@ defmodule LesBonsComptesWeb.SignInLive do
                   phx-disable-with="Création en base..."
                   class="btn btn-primary w-full shadow-md text-base font-medium flex items-center justify-center gap-2"
                 >
-                  <.icon name="hero-check" class="size-5" /> Enregistrer l'utilisateur en base
+                  <.icon name="hero-check" class="size-5" /> Enregistrer l'utilisateur et se connecter
                 </button>
               </div>
             </.form>

@@ -24,7 +24,7 @@ defmodule LesBonsComptesWeb.SignInLiveTest do
     assert has_element?(view, "#user-sign-in-form")
   end
 
-  test "creates user in database upon form submit", %{conn: conn} do
+  test "creates user in database and redirects to initialize session", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sign-in")
 
     valid_attrs = %{
@@ -33,15 +33,21 @@ defmodule LesBonsComptesWeb.SignInLiveTest do
       password: "motdepassesolide"
     }
 
-    view
-    |> form("#user-sign-in-form", user: valid_attrs)
-    |> render_submit()
+    assert {:error, {:redirect, %{to: login_path}}} =
+             view
+             |> form("#user-sign-in-form", user: valid_attrs)
+             |> render_submit()
 
-    # Vérification que l'utilisateur est bien enregistré en base de données
+    assert login_path =~ "/users/log_in?token="
+
+    # Vérification que l'utilisateur est bien enregistré en base de données avec mot de passe haché
     assert [user] = Enum.filter(Accounts.list_users(), &(&1.email == "martin.dupont@test.fr"))
     assert user.name == "Martin Dupont"
+    assert user.hashed_password != nil
 
-    # Vérification que la liste en temps réel et le message de confirmation s'affichent
-    assert has_element?(view, "#users")
+    # Suivre la redirection pour vérifier l'initialisation de la session (IF-27)
+    conn = get(conn, login_path)
+    assert get_session(conn, :user_id) == user.id
+    assert redirected_to(conn) == ~p"/"
   end
 end

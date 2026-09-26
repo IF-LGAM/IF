@@ -1,6 +1,8 @@
 defmodule LesBonsComptesWeb.Router do
   use LesBonsComptesWeb, :router
 
+  import LesBonsComptesWeb.UserAuth
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,6 +10,7 @@ defmodule LesBonsComptesWeb.Router do
     plug :put_root_layout, html: {LesBonsComptesWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_user
   end
 
   pipeline :api do
@@ -18,8 +21,17 @@ defmodule LesBonsComptesWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    live "/sign-in", SignInLive
-    live "/sign-up", SignInLive
+
+    # Routes d'authentification et gestion de session (IF-27)
+    get "/users/log_in", UserSessionController, :create
+    post "/users/log_in", UserSessionController, :create
+    delete "/users/log_out", UserSessionController, :delete
+
+    live_session :current_user,
+      on_mount: [{LesBonsComptesWeb.UserAuth, :mount_current_user}] do
+      live "/sign-in", SignInLive
+      live "/sign-up", SignInLive
+    end
   end
 
   # Other scopes may use custom stacks.
