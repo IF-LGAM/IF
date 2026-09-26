@@ -31,7 +31,7 @@ cd les_bons_comptes
 
 ### Étape 2 : Construire l'image Docker de l'application
 ```bash
-docker compose build
+docker compose up --build -d
 ```
 
 ### Étape 3 : Démarrer les conteneurs
