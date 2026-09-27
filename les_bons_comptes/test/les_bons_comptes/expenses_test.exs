@@ -418,4 +418,126 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Expenses.calculate_creditors(wallet) == []
     end
   end
+
+  describe "get_balance_data/1 et fetch_balance_data/1 (Récupération des données pour le calcul des soldes)" do
+    test "porte-monnaie avec dépenses et participants : agrège fidèlement toutes les données nécessaires" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Voyage Madrid", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      charlie_member = Enum.find(wallet.members, &(&1.name == "Charlie"))
+
+      {:ok, _e1} =
+        Expenses.create_expense(creator, wallet, %{title: "Train A", amount: "60.00"})
+
+      {:ok, _e2} =
+        Expenses.create_expense(creator, wallet, %{title: "Train B", amount: "40.00"})
+
+      {:ok, _e3} =
+        Expenses.create_expense(bob, wallet, %{title: "Hôtel", amount: "50.00"})
+
+      # Données récupérées
+      data = Expenses.get_balance_data(wallet)
+
+      assert is_map(data)
+      assert data.wallet_id == wallet.id
+      assert data.currency == "EUR"
+      assert data.members_count == 3
+      assert length(data.members) == 3
+      assert data.expenses_count == 3
+      assert Expenses.count_expenses_for_wallet(wallet.id) == 3
+      assert Decimal.equal?(data.total_expenses, Decimal.new("150.00"))
+
+      # Vérification des cumuls par participant
+      assert Decimal.equal?(
+               Map.get(data.expenses_by_member, alice_member.id),
+               Decimal.new("100.00")
+             )
+
+      assert Decimal.equal?(Map.get(data.expenses_by_member, bob_member.id), Decimal.new("50.00"))
+      assert Map.get(data.expenses_by_member, charlie_member.id) == nil
+
+      # fetch_balance_data/1 retourne {:ok, data}
+      assert {:ok, fetch_data} = Expenses.fetch_balance_data(wallet)
+      assert fetch_data == data
+    end
+
+    test "porte-monnaie sans dépenses : structure initiale cohérente" do
+      %{wallet: wallet} = setup_wallet_with_members()
+
+      data = Expenses.get_balance_data(wallet)
+
+      assert is_map(data)
+      assert data.wallet_id == wallet.id
+      assert data.currency == "EUR"
+      assert data.members_count == 2
+      assert length(data.members) == 2
+      assert data.expenses_count == 0
+      assert Expenses.count_expenses_for_wallet(wallet.id) == 0
+      assert Decimal.equal?(data.total_expenses, Decimal.new("0.00"))
+      assert data.expenses_by_member == %{}
+
+      assert {:ok, _} = Expenses.fetch_balance_data(wallet)
+    end
+
+    test "support polymorphique des paramètres (%Wallet{}, id entier, string) et délégations Wallets" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{title: "Restaurant", amount: "45.00"})
+
+      by_struct = Expenses.get_balance_data(wallet)
+      by_id = Expenses.get_balance_data(wallet.id)
+      by_string_id = Expenses.get_balance_data("#{wallet.id}")
+      via_wallets = Wallets.get_balance_data(wallet.id)
+      via_wallets_fetch = Wallets.fetch_balance_data(wallet.id)
+
+      assert is_map(by_struct)
+      assert by_id == by_string_id
+      assert by_id == via_wallets
+      assert {:ok, by_id} == via_wallets_fetch
+
+      assert by_struct.wallet_id == by_id.wallet_id
+      assert by_struct.currency == by_id.currency
+      assert by_struct.members_count == by_id.members_count
+      assert by_struct.expenses_count == by_id.expenses_count
+      assert Decimal.equal?(by_struct.total_expenses, by_id.total_expenses)
+      assert by_struct.expenses_by_member == by_id.expenses_by_member
+    end
+
+    test "identifiant invalide, inexistant ou nil" do
+      assert Expenses.get_balance_data(999_999) == nil
+      assert Expenses.get_balance_data("inexistant") == nil
+      assert Expenses.get_balance_data(nil) == nil
+
+      assert Expenses.fetch_balance_data(999_999) == {:error, :not_found}
+      assert Expenses.fetch_balance_data("inexistant") == {:error, :not_found}
+      assert Expenses.fetch_balance_data(nil) == {:error, :not_found}
+
+      assert Wallets.get_balance_data(999_999) == nil
+      assert Wallets.fetch_balance_data(999_999) == {:error, :not_found}
+    end
+
+    test "calculate_balances/1 peut directement consommer les données pré-récupérées" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{title: "Cinéma", amount: "30.00"})
+
+      data = Expenses.get_balance_data(wallet)
+      balances_from_data = Expenses.calculate_balances(data)
+      balances_from_wallet = Expenses.calculate_balances(wallet)
+
+      assert length(balances_from_data) == 2
+      assert balances_from_data == balances_from_wallet
+    end
+  end
 end
