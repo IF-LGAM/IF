@@ -7,12 +7,19 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    data = load_wallet_data(id)
+    case load_wallet_data(id) do
+      {:ok, data} ->
+        {:ok,
+         socket
+         |> assign(:page_title, "#{data.wallet.name} - Les Bons Comptes")
+         |> assign(data)}
 
-    {:ok,
-     socket
-     |> assign(:page_title, "#{data.wallet.name} - Les Bons Comptes")
-     |> assign(data)}
+      {:error, :not_found} ->
+        {:ok,
+         socket
+         |> put_flash(:error, "Ce porte-monnaie n'existe pas ou est introuvable.")
+         |> push_navigate(to: ~p"/wallets")}
+    end
   end
 
   @impl true
@@ -69,13 +76,22 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
     case Expenses.delete_expense(current_user, expense_id) do
       {:ok, deleted_expense} ->
-        {:noreply,
-         socket
-         |> assign(load_wallet_data(wallet.id))
-         |> put_flash(
-           :info,
-           "La dépense « #{deleted_expense.title} » a été supprimée avec succès."
-         )}
+        case load_wallet_data(wallet.id) do
+          {:ok, data} ->
+            {:noreply,
+             socket
+             |> assign(data)
+             |> put_flash(
+               :info,
+               "La dépense « #{deleted_expense.title} » a été supprimée avec succès."
+             )}
+
+          {:error, :not_found} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, "Ce porte-monnaie n'existe pas ou est introuvable.")
+             |> push_navigate(to: ~p"/wallets")}
+        end
 
       {:error, :unauthorized} ->
         {:noreply,
@@ -90,15 +106,23 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
   end
 
   defp load_wallet_data(wallet_id) do
-    wallet = Wallets.get_wallet!(wallet_id)
-    total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
-    expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+    try do
+      wallet = Wallets.get_wallet!(wallet_id)
+      total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
+      expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
+      creditors = Expenses.calculate_creditors(wallet)
 
-    %{
-      wallet: wallet,
-      total_expenses: total_expenses,
-      expenses_by_member: expenses_by_member
-    }
+      {:ok,
+       %{
+         wallet: wallet,
+         total_expenses: total_expenses,
+         expenses_by_member: expenses_by_member,
+         creditors: creditors
+       }}
+    rescue
+      _ in [Ecto.NoResultsError, ArgumentError] ->
+        {:error, :not_found}
+    end
   end
 
   @impl true
@@ -282,6 +306,55 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                     expense={expense}
                     can_delete={Expenses.can_delete_expense?(@current_user, expense)}
                   />
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+        <%!-- Comptes à rembourser (US : Lister les comptes qui doivent recevoir de l’argent et combien) --%>
+        <div id="wallet-creditors-section" class="card bg-base-100 shadow-xl border border-base-200">
+          <div class="card-body p-6 sm:p-8 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
+                  <.icon name="hero-arrow-path" class="size-5 text-success" />
+                  <span>Comptes à rembourser ({length(@creditors)})</span>
+                </h2>
+                <p class="text-xs text-base-content/60">
+                  Participants ayant avancé des frais et devant recevoir un remboursement
+                </p>
+              </div>
+
+              <%= if @creditors != [] do %>
+                <span id="creditors-count-badge" class="badge badge-success badge-sm font-semibold">
+                  {length(@creditors)} bénéficiaire(s)
+                </span>
+              <% end %>
+            </div>
+
+            <%= if @creditors == [] do %>
+              <div
+                id="no-creditors-message"
+                class="text-center py-8 text-base-content/60 bg-base-200/30 rounded-xl border border-dashed border-base-300 space-y-2"
+              >
+                <.icon name="hero-check-badge" class="size-8 mx-auto text-success/60" />
+                <%= if @wallet.expenses == [] do %>
+                  <p class="font-medium text-sm">Aucun remboursement en attente</p>
+                  <p class="text-xs">
+                    Ajoutez des dépenses au groupe pour calculer automatiquement les soldes et les montants à recevoir.
+                  </p>
+                <% else %>
+                  <p class="font-medium text-sm">Les comptes sont équilibrés !</p>
+                  <p class="text-xs">
+                    Chaque participant a payé exactement sa part équitable. Aucun remboursement n'est nécessaire.
+                  </p>
+                <% end %>
+              </div>
+            <% else %>
+              <div id="wallet-creditors-list" class="divide-y divide-base-200">
+                <%= for creditor <- @creditors do %>
+                  <.creditor_item creditor={creditor} currency={@wallet.currency} />
                 <% end %>
               </div>
             <% end %>

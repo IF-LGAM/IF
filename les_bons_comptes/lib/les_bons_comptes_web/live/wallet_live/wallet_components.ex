@@ -258,4 +258,55 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     </div>
     """
   end
+
+  @doc """
+  Composant d'affichage d'un compte créditeur à rembourser.
+  Affiche le nom, le badge, le montant net à recevoir mis en valeur, et le détail du calcul.
+  """
+  attr :creditor, :map, required: true
+  attr :currency, :string, default: "EUR"
+
+  def creditor_item(assigns) do
+    member = assigns.creditor.member
+    is_owner = member && member.role == "owner"
+    role = (member && member.role) || "member"
+
+    assigns =
+      assigns
+      |> assign(:is_owner, is_owner)
+      |> assign(:role, role)
+
+    ~H"""
+    <div
+      id={"creditor-item-#{@creditor.member_id}"}
+      class="py-3 flex items-center justify-between gap-4"
+    >
+      <div class="flex items-center gap-3 min-w-0">
+        <.member_avatar name={@creditor.name} is_owner={@is_owner} size="size-10" />
+        <div class="min-w-0">
+          <div class="font-semibold text-sm text-base-content flex items-center gap-2 truncate">
+            <span>{@creditor.name}</span>
+            <.member_badge role={@role} is_owner={@is_owner} />
+          </div>
+          <div class="text-xs text-base-content/60 flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span :if={@creditor.email}>{@creditor.email} •</span>
+            <span>A payé {format_amount(@creditor.total_paid)} {@currency}</span>
+            <span>•</span>
+            <span>Part due : {format_amount(@creditor.fair_share)} {@currency}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-right shrink-0">
+        <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success/10 text-success border border-success/20">
+          <.icon name="hero-arrow-down-left" class="size-3.5" />
+          <span class="text-sm font-bold">
+            + {format_amount(@creditor.amount_to_receive)} {@currency}
+          </span>
+        </div>
+        <div class="text-xs text-base-content/50 mt-0.5">À recevoir</div>
+      </div>
+    </div>
+    """
+  end
 end

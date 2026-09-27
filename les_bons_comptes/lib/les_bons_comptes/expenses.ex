@@ -141,6 +141,17 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
+  Compte le nombre total de dépenses enregistrées pour un porte-monnaie.
+  """
+  def count_expenses_for_wallet(wallet_id) when is_integer(wallet_id) or is_binary(wallet_id) do
+    from(e in Expense,
+      where: e.wallet_id == ^wallet_id,
+      select: count(e.id)
+    )
+    |> Repo.one() || 0
+  end
+
+  @doc """
   Vérifie si un utilisateur a le droit de supprimer une dépense (IF-77, IF-79).
   Autorisé si l'utilisateur est :
   - le créateur de la dépense (`created_by_id == user.id`),
@@ -174,5 +185,195 @@ defmodule LesBonsComptes.Expenses do
       when is_integer(expense_id) or is_binary(expense_id) do
     expense = get_expense!(expense_id)
     delete_expense(user, expense)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Récupération des données nécessaires au calcul des soldes
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Récupère et agrège toutes les données nécessaires au calcul des soldes d'un porte-monnaie.
+  Accepte un struct `%Wallet{}`, un identifiant entier ou une chaîne de caractères (`"1"`).
+
+  Retourne une map contenant :
+  - `:wallet` : struct `%Wallet{}` avec ses membres préchargés
+  - `:wallet_id` : identifiant entier du porte-monnaie
+  - `:currency` : devise du porte-monnaie (ex: "EUR")
+  - `:members` : liste des participants (`[%WalletMember{}]`)
+  - `:members_count` : nombre total de participants
+  - `:total_expenses` : montant total cumulé des dépenses (`%Decimal{}`)
+  - `:expenses_by_member` : map `%{member_id => total_payé}` (%Decimal{})
+  - `:expenses_count` : nombre total de dépenses enregistrées
+
+  Retourne `nil` si le porte-monnaie n'est pas trouvé ou si l'ID est invalide/`nil`.
+  """
+  def get_balance_data(%Wallet{} = wallet) do
+    wallet = Repo.preload(wallet, [:members])
+    build_balance_data(wallet)
+  end
+
+  def get_balance_data(wallet_id) when is_binary(wallet_id) do
+    case Integer.parse(wallet_id) do
+      {id, ""} -> get_balance_data(id)
+      _ -> nil
+    end
+  end
+
+  def get_balance_data(wallet_id) when is_integer(wallet_id) do
+    case Repo.get(Wallet, wallet_id) do
+      nil -> nil
+      wallet -> get_balance_data(wallet)
+    end
+  end
+
+  def get_balance_data(_), do: nil
+
+  @doc """
+  Variante de `get_balance_data/1` retournant `{:ok, balance_data}` ou `{:error, :not_found}`.
+  """
+  def fetch_balance_data(wallet_or_id) do
+    case get_balance_data(wallet_or_id) do
+      nil -> {:error, :not_found}
+      data -> {:ok, data}
+    end
+  end
+
+  defp build_balance_data(%Wallet{} = wallet) do
+    members = wallet.members || []
+    total_expenses = total_expenses_for_wallet(wallet.id)
+    expenses_by_member = total_expenses_by_member(wallet.id)
+    expenses_count = count_expenses_for_wallet(wallet.id)
+
+    %{
+      wallet: wallet,
+      wallet_id: wallet.id,
+      currency: wallet.currency,
+      members: members,
+      members_count: length(members),
+      total_expenses: total_expenses,
+      expenses_by_member: expenses_by_member,
+      expenses_count: expenses_count
+    }
+  end
+
+  # ---------------------------------------------------------------------------
+  # Calcul des soldes et des comptes créditeurs
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Calcule la balance nette de chaque participant d'un porte-monnaie.
+  Pour chaque membre, la part équitable théorique (total des dépenses / nombre de membres)
+  est déduite du total qu'il a payé :
+  `balance = total_payé - part_équitable`.
+
+  Accepte soit :
+  - une structure de données pré-récupérée issue de `get_balance_data/1`
+  - un struct `%Wallet{}`
+  - un identifiant de porte-monnaie (entier ou chaîne)
+
+  Retourne une liste de maps avec pour chaque membre :
+  - `:member` : Struct `%WalletMember{}`
+  - `:member_id` : ID du membre
+  - `:name` : Nom du membre
+  - `:email` : Email du membre
+  - `:total_paid` : Montant total payé (%Decimal{})
+  - `:fair_share` : Part théorique due par membre (%Decimal{})
+  - `:balance` : Solde net (%Decimal{}), positif si créditeur, négatif si débiteur
+  - `:amount` : Montant positif à recevoir si créditeur (%Decimal{}), sinon 0.00
+  - `:amount_to_receive` : Alias de :amount
+  - `:type` : `:creditor` (> 0), `:debtor` (< 0) ou `:balanced` (== 0)
+  - `:currency` : Devise du porte-monnaie
+  """
+  def calculate_balances(
+        %{members: _, members_count: _, total_expenses: _, expenses_by_member: _} = data
+      ) do
+    do_calculate_balances(data)
+  end
+
+  def calculate_balances(wallet_or_id) do
+    case get_balance_data(wallet_or_id) do
+      nil -> []
+      balance_data -> do_calculate_balances(balance_data)
+    end
+  end
+
+  @doc """
+  Calcule les comptes créditeurs d'un porte-monnaie et les montants qu'ils doivent recevoir.
+  Filtre les participants qui ont payé plus que leur part équitable (`balance > 0.00`).
+  Trie les comptes créditeurs par montant à recevoir décroissant.
+
+  Retourne une liste de maps contenant :
+  - `:member` : Struct `%WalletMember{}`
+  - `:member_id` : ID du membre
+  - `:name` : Nom du membre
+  - `:email` : Email du membre
+  - `:amount_to_receive` : Montant à recevoir (%Decimal{})
+  - `:amount` : Alias de `:amount_to_receive`
+  - `:total_paid` : Total payé par ce membre
+  - `:fair_share` : Part équitable due par chaque participant
+  - `:balance` : Solde net créditeur (%Decimal{})
+  - `:currency` : Devise du porte-monnaie
+  """
+  def calculate_creditors(wallet_or_id) do
+    wallet_or_id
+    |> calculate_balances()
+    |> Enum.filter(&(&1.type == :creditor))
+    |> Enum.sort_by(& &1.amount_to_receive, {:desc, Decimal})
+  end
+
+  @doc """
+  Alias pour `calculate_creditors/1`.
+  """
+  defdelegate list_creditors(wallet_or_id), to: __MODULE__, as: :calculate_creditors
+
+  @doc """
+  Alias pour `calculate_creditors/1` pour la sous-tâche de calcul des comptes créditeurs.
+  """
+  defdelegate calculate_creditor_accounts(wallet_or_id), to: __MODULE__, as: :calculate_creditors
+
+  defp do_calculate_balances(%{members_count: 0}), do: []
+
+  defp do_calculate_balances(%{
+         members: members,
+         members_count: members_count,
+         total_expenses: total_expenses,
+         expenses_by_member: expenses_by_member,
+         currency: currency
+       }) do
+    members_count_dec = Decimal.new(members_count)
+    fair_share = Decimal.round(Decimal.div(total_expenses, members_count_dec), 2)
+
+    Enum.map(members, fn member ->
+      total_paid = Map.get(expenses_by_member, member.id, Decimal.new("0.00"))
+      balance = Decimal.round(Decimal.sub(total_paid, fair_share), 2)
+
+      type =
+        cond do
+          Decimal.gt?(balance, Decimal.new("0.00")) -> :creditor
+          Decimal.lt?(balance, Decimal.new("0.00")) -> :debtor
+          true -> :balanced
+        end
+
+      amount_to_receive =
+        if type == :creditor do
+          balance
+        else
+          Decimal.new("0.00")
+        end
+
+      %{
+        member: member,
+        member_id: member.id,
+        name: member.name,
+        email: member.email,
+        total_paid: total_paid,
+        fair_share: fair_share,
+        balance: balance,
+        amount: amount_to_receive,
+        amount_to_receive: amount_to_receive,
+        type: type,
+        currency: currency
+      }
+    end)
   end
 end
