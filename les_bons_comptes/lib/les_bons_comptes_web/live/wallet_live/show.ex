@@ -94,10 +94,13 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
     total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
     expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
 
+    creditors = Expenses.calculate_creditors(wallet)
+
     %{
       wallet: wallet,
       total_expenses: total_expenses,
-      expenses_by_member: expenses_by_member
+      expenses_by_member: expenses_by_member,
+      creditors: creditors
     }
   end
 

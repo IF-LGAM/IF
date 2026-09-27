@@ -175,4 +175,130 @@ defmodule LesBonsComptes.Expenses do
     expense = get_expense!(expense_id)
     delete_expense(user, expense)
   end
+
+  # ---------------------------------------------------------------------------
+  # Calcul des soldes et des comptes créditeurs
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Calcule la balance nette de chaque participant d'un porte-monnaie.
+  Pour chaque membre, la part équitable théorique (total des dépenses / nombre de membres)
+  est déduite du total qu'il a payé :
+  `balance = total_payé - part_équitable`.
+
+  Retourne une liste de maps avec pour chaque membre :
+  - `:member` : Struct `%WalletMember{}`
+  - `:member_id` : ID du membre
+  - `:name` : Nom du membre
+  - `:email` : Email du membre
+  - `:total_paid` : Montant total payé (%Decimal{})
+  - `:fair_share` : Part théorique due par membre (%Decimal{})
+  - `:balance` : Solde net (%Decimal{}), positif si créditeur, négatif si débiteur
+  - `:amount` : Montant positif à recevoir si créditeur (%Decimal{}), sinon 0.00
+  - `:amount_to_receive` : Alias de :amount
+  - `:type` : `:creditor` (> 0), `:debtor` (< 0) ou `:balanced` (== 0)
+  - `:currency` : Devise du porte-monnaie
+  """
+  def calculate_balances(%Wallet{} = wallet) do
+    wallet = Repo.preload(wallet, [:members])
+    do_calculate_balances(wallet)
+  end
+
+  def calculate_balances(wallet_id) when is_binary(wallet_id) do
+    case Integer.parse(wallet_id) do
+      {id, ""} -> calculate_balances(id)
+      _ -> []
+    end
+  end
+
+  def calculate_balances(wallet_id) when is_integer(wallet_id) do
+    case Repo.get(Wallet, wallet_id) do
+      nil -> []
+      wallet -> calculate_balances(wallet)
+    end
+  end
+
+  def calculate_balances(_), do: []
+
+  @doc """
+  Calcule les comptes créditeurs d'un porte-monnaie et les montants qu'ils doivent recevoir.
+  Filtre les participants qui ont payé plus que leur part équitable (`balance > 0.00`).
+  Trie les comptes créditeurs par montant à recevoir décroissant.
+
+  Retourne une liste de maps contenant :
+  - `:member` : Struct `%WalletMember{}`
+  - `:member_id` : ID du membre
+  - `:name` : Nom du membre
+  - `:email` : Email du membre
+  - `:amount_to_receive` : Montant à recevoir (%Decimal{})
+  - `:amount` : Alias de `:amount_to_receive`
+  - `:total_paid` : Total payé par ce membre
+  - `:fair_share` : Part équitable due par chaque participant
+  - `:balance` : Solde net créditeur (%Decimal{})
+  - `:currency` : Devise du porte-monnaie
+  """
+  def calculate_creditors(wallet_or_id) do
+    wallet_or_id
+    |> calculate_balances()
+    |> Enum.filter(&(&1.type == :creditor))
+    |> Enum.sort_by(& &1.amount_to_receive, {:desc, Decimal})
+  end
+
+  @doc """
+  Alias pour `calculate_creditors/1`.
+  """
+  defdelegate list_creditors(wallet_or_id), to: __MODULE__, as: :calculate_creditors
+
+  @doc """
+  Alias pour `calculate_creditors/1` pour la sous-tâche de calcul des comptes créditeurs.
+  """
+  defdelegate calculate_creditor_accounts(wallet_or_id), to: __MODULE__, as: :calculate_creditors
+
+  defp do_calculate_balances(wallet) do
+    members = wallet.members || []
+    members_count = length(members)
+
+    if members_count == 0 do
+      []
+    else
+      total_expenses = total_expenses_for_wallet(wallet.id)
+      expenses_by_member = total_expenses_by_member(wallet.id)
+
+      members_count_dec = Decimal.new(members_count)
+      fair_share = Decimal.round(Decimal.div(total_expenses, members_count_dec), 2)
+
+      Enum.map(members, fn member ->
+        total_paid = Map.get(expenses_by_member, member.id, Decimal.new("0.00"))
+        balance = Decimal.round(Decimal.sub(total_paid, fair_share), 2)
+
+        type =
+          cond do
+            Decimal.gt?(balance, Decimal.new("0.00")) -> :creditor
+            Decimal.lt?(balance, Decimal.new("0.00")) -> :debtor
+            true -> :balanced
+          end
+
+        amount_to_receive =
+          if type == :creditor do
+            balance
+          else
+            Decimal.new("0.00")
+          end
+
+        %{
+          member: member,
+          member_id: member.id,
+          name: member.name,
+          email: member.email,
+          total_paid: total_paid,
+          fair_share: fair_share,
+          balance: balance,
+          amount: amount_to_receive,
+          amount_to_receive: amount_to_receive,
+          type: type,
+          currency: wallet.currency
+        }
+      end)
+    end
+  end
 end

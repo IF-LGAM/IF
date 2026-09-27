@@ -238,4 +238,184 @@ defmodule LesBonsComptes.ExpensesTest do
       assert {:error, :unauthorized} = Expenses.delete_expense(charlie_user, expense)
     end
   end
+
+  describe "calculate_creditors/1 et calculate_balances/1 (Calcul des comptes créditeurs)" do
+    test "porte-monnaie sans dépenses : aucun créditeur et soldes à zéro" do
+      %{wallet: wallet} = setup_wallet_with_members()
+
+      assert Expenses.calculate_creditors(wallet) == []
+      assert Expenses.list_creditors(wallet) == []
+      assert Expenses.calculate_creditor_accounts(wallet) == []
+
+      balances = Expenses.calculate_balances(wallet)
+      assert length(balances) == 2
+      assert Enum.all?(balances, &(&1.type == :balanced))
+      assert Enum.all?(balances, &Decimal.equal?(&1.balance, Decimal.new("0.00")))
+      assert Enum.all?(balances, &Decimal.equal?(&1.total_paid, Decimal.new("0.00")))
+    end
+
+    test "porte-monnaie avec un seul membre : aucun créditeur" do
+      creator = create_user(%{name: "Solitaire"})
+      {:ok, wallet} = Wallets.create_wallet(creator, %{name: "Projet Solo", currency: "EUR"})
+
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{title: "Abonnement", amount: "50.00"})
+
+      assert Expenses.calculate_creditors(wallet) == []
+      [single_balance] = Expenses.calculate_balances(wallet)
+      assert single_balance.type == :balanced
+      assert Decimal.equal?(single_balance.balance, Decimal.new("0.00"))
+    end
+
+    test "deux membres : calcul exact du compte créditeur et du montant à recevoir" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{
+          title: "Courses supermarché",
+          amount: "100.00"
+        })
+
+      # Alice a payé 100€, Bob 0€. Total = 100€, part par membre = 50€
+      # Alice doit recevoir 50€
+      assert [creditor] = Expenses.calculate_creditors(wallet)
+
+      assert creditor.name == "Alice"
+      assert Decimal.equal?(creditor.amount_to_receive, Decimal.new("50.00"))
+      assert Decimal.equal?(creditor.amount, Decimal.new("50.00"))
+      assert Decimal.equal?(creditor.total_paid, Decimal.new("100.00"))
+      assert Decimal.equal?(creditor.fair_share, Decimal.new("50.00"))
+      assert Decimal.equal?(creditor.balance, Decimal.new("50.00"))
+      assert creditor.currency == "EUR"
+      assert creditor.member.id == Enum.find(wallet.members, &(&1.name == "Alice")).id
+    end
+
+    test "plusieurs membres et dépenses : liste les créditeurs triés par montant décroissant" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+      david = create_user(%{name: "David"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Voyage à 4", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id},
+          %{name: "David", email: david.email, user_id: david.id}
+        ])
+
+      # Total = 80 + 40 + 60 + 20 = 200€
+      # Nombre de membres = 4 -> part équitable = 50€
+      # Alice paie : 80 + 40 = 120€ -> balance = +70€ (créditeur 1)
+      # Bob paie : 60€ -> balance = +10€ (créditeur 2)
+      # Charlie paie : 20€ -> balance = -30€ (débiteur)
+      # David paie : 0€ -> balance = -50€ (débiteur)
+
+      {:ok, _e1} =
+        Expenses.create_expense(creator, wallet, %{title: "Location", amount: "80.00"})
+
+      {:ok, _e2} =
+        Expenses.create_expense(creator, wallet, %{title: "Essence", amount: "40.00"})
+
+      {:ok, _e3} =
+        Expenses.create_expense(bob, wallet, %{title: "Restaurant", amount: "60.00"})
+
+      {:ok, _e4} =
+        Expenses.create_expense(charlie, wallet, %{title: "Péage", amount: "20.00"})
+
+      creditors = Expenses.calculate_creditors(wallet)
+      assert length(creditors) == 2
+
+      [first, second] = creditors
+
+      # Trié par montant à recevoir décroissant
+      assert first.name == "Alice"
+      assert Decimal.equal?(first.amount_to_receive, Decimal.new("70.00"))
+      assert Decimal.equal?(first.total_paid, Decimal.new("120.00"))
+      assert Decimal.equal?(first.fair_share, Decimal.new("50.00"))
+
+      assert second.name == "Bob"
+      assert Decimal.equal?(second.amount_to_receive, Decimal.new("10.00"))
+      assert Decimal.equal?(second.total_paid, Decimal.new("60.00"))
+      assert Decimal.equal?(second.fair_share, Decimal.new("50.00"))
+    end
+
+    test "tous les membres ont payé la même somme : aucun créditeur" do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, _e1} =
+        Expenses.create_expense(creator, wallet, %{title: "Billet train A", amount: "50.00"})
+
+      {:ok, _e2} =
+        Expenses.create_expense(bob, wallet, %{title: "Billet train B", amount: "50.00"})
+
+      # Total = 100€, 2 membres -> part = 50€ chacun -> soldes = 0€
+      assert Expenses.calculate_creditors(wallet) == []
+    end
+
+    test "calcul avec division non entière et arrondi à 2 décimales" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Trio", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      # 100€ payés par Alice, part = 100 / 3 = 33.33€
+      # Alice doit recevoir 100 - 33.33 = 66.67€
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{title: "Dîner", amount: "100.00"})
+
+      assert [creditor] = Expenses.calculate_creditors(wallet)
+      assert creditor.name == "Alice"
+      assert Decimal.equal?(creditor.amount_to_receive, Decimal.new("66.67"))
+      assert Decimal.equal?(creditor.fair_share, Decimal.new("33.33"))
+    end
+
+    test "fonctionne avec %Wallet{}, id entier ou id sous forme de chaîne et via Wallets" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{title: "Cadeau", amount: "60.00"})
+
+      by_struct = Expenses.calculate_creditors(wallet)
+      by_id = Expenses.calculate_creditors(wallet.id)
+      by_string_id = Expenses.calculate_creditors("#{wallet.id}")
+      via_wallets = Wallets.calculate_creditors(wallet)
+      via_wallets_list = Wallets.list_creditors(wallet.id)
+      via_wallets_alias = Wallets.calculate_creditor_accounts(wallet.id)
+
+      assert length(by_struct) == 1
+      assert by_struct == by_id
+      assert by_struct == by_string_id
+      assert by_struct == via_wallets
+      assert by_struct == via_wallets_list
+      assert by_struct == via_wallets_alias
+    end
+
+    test "identifiant invalide, inexistant ou nil retourne une liste vide" do
+      assert Expenses.calculate_creditors(999_999) == []
+      assert Expenses.calculate_creditors("inexistant") == []
+      assert Expenses.calculate_creditors(nil) == []
+      assert Expenses.calculate_balances(999_999) == []
+      assert Expenses.calculate_balances("inexistant") == []
+      assert Expenses.calculate_balances(nil) == []
+    end
+
+    test "recalcul dynamique après suppression d'une dépense" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Spectacle", amount: "100.00"})
+
+      assert [creditor] = Expenses.calculate_creditors(wallet)
+      assert Decimal.equal?(creditor.amount_to_receive, Decimal.new("50.00"))
+
+      {:ok, _deleted} = Expenses.delete_expense(creator, expense)
+
+      assert Expenses.calculate_creditors(wallet) == []
+    end
+  end
 end
