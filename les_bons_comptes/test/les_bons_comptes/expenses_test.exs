@@ -237,6 +237,81 @@ defmodule LesBonsComptes.ExpensesTest do
       refute Expenses.can_delete_expense?(charlie_user, expense)
       assert {:error, :unauthorized} = Expenses.delete_expense(charlie_user, expense)
     end
+
+    test "la suppression d'une dépense est strictement interdite hors phase de déclaration" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      # Étape 2 : en attente de virements
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+      expense_pending = Expenses.get_expense!(expense.id)
+
+      refute Expenses.can_delete_expense?(creator, expense_pending)
+      assert {:error, :wallet_closed} = Expenses.delete_expense(creator, expense_pending)
+
+      # Étape 3 : clos
+      {:ok, _closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
+      expense_closed = Expenses.get_expense!(expense.id)
+
+      refute Expenses.can_delete_expense?(creator, expense_closed)
+      assert {:error, :wallet_closed} = Expenses.delete_expense(creator, expense_closed)
+    end
+  end
+
+  describe "can_edit_expense?/2 et update_expense/3 (Modification des dépenses en phase de déclaration)" do
+    test "la personne ayant ajouté la dépense peut la modifier" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      assert Expenses.can_edit_expense?(creator, expense)
+      assert {:ok, updated} = Expenses.update_expense(creator, expense, %{title: "Courses Bio", amount: "60.00"})
+      assert updated.title == "Courses Bio"
+      assert Decimal.equal?(updated.amount, Decimal.new("60.00"))
+    end
+
+    test "le membre payeur peut modifier la dépense même créée par un autre" do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{
+          title: "Essence",
+          amount: "40.00",
+          payer_id: bob_member.id
+        })
+
+      assert Expenses.can_edit_expense?(bob, expense)
+      assert {:ok, updated} = Expenses.update_expense(bob, expense, %{title: "Essence autoroute"})
+      assert updated.title == "Essence autoroute"
+    end
+
+    test "un tiers ne peut pas modifier la dépense" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      charlie_user = create_user(%{name: "Charlie"})
+
+      {:ok, _} =
+        Wallets.add_member(creator, wallet, %{
+          name: "Charlie",
+          email: charlie_user.email,
+          user_id: charlie_user.id
+        })
+
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      refute Expenses.can_edit_expense?(charlie_user, expense)
+      assert {:error, :unauthorized} = Expenses.update_expense(charlie_user, expense, %{title: "Fraude"})
+    end
+
+    test "la modification est strictement interdite hors phase de déclaration" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      {:ok, _pending_wallet} = Wallets.validate_wallet(creator, wallet)
+      expense_pending = Expenses.get_expense!(expense.id)
+
+      refute Expenses.can_edit_expense?(creator, expense_pending)
+      assert {:error, :wallet_closed} = Expenses.update_expense(creator, expense_pending, %{title: "Tentative"})
+    end
   end
 
   describe "calculate_creditors/1 et calculate_balances/1 (Calcul des comptes créditeurs)" do
@@ -705,6 +780,197 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Expenses.calculate_settlements(wallet) == []
       assert Wallets.calculate_settlements(wallet) == []
       assert Wallets.optimize_settlements(wallet) == []
+    end
+  end
+
+  describe "mock_settle_transfer/4 et mock_settle_all/1 (Action de remboursement mock pour un porte-monnaie clos - IF-85)" do
+    test "create_expense/3 est rejeté si le porte-monnaie est validé ou clos" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+
+      assert {:error, :wallet_closed} =
+               Expenses.create_expense(creator, pending_wallet, %{
+                 title: "Dépense interdite en attente de virement",
+                 amount: "20.00"
+               })
+
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
+
+      assert {:error, :wallet_closed} =
+               Expenses.create_expense(creator, closed_wallet, %{
+                 title: "Dépense interdite quand clos",
+                 amount: "20.00"
+               })
+    end
+
+    test "mock_settle_transfer est rejeté avec :wallet_not_closed si le porte-monnaie est ouvert" do
+      %{creator: _creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      assert wallet.status == "open"
+
+      assert {:error, :wallet_not_closed} =
+               Expenses.mock_settle_transfer(wallet, bob_member.id, alice_member.id, "30.00")
+
+      assert {:error, :wallet_not_closed} =
+               Wallets.mock_settle_transfer(wallet, %{
+                 from_id: bob_member.id,
+                 to_id: alice_member.id,
+                 amount: "30.00"
+               })
+    end
+
+    test "mock_settle_transfer réussit si le porte-monnaie est validé (Étape 2) ou clos (Étape 3)" do
+      %{creator: creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      # Étape 2 : validé
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+
+      assert {:ok, pending_res} =
+               Expenses.mock_settle_transfer(pending_wallet, bob_member.id, alice_member.id, "40.00")
+
+      assert pending_res.status == "settled"
+      assert pending_res.settled == true
+
+      # Étape 3 : clos
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
+
+      assert {:ok, mock_res} =
+               Expenses.mock_settle_transfer(closed_wallet, bob_member.id, alice_member.id, "40.00")
+
+      assert mock_res.status == "settled"
+      assert mock_res.settled == true
+      assert mock_res.from_id == bob_member.id
+      assert mock_res.from_name == "Bob"
+      assert mock_res.to_id == alice_member.id
+      assert mock_res.to_name == "Alice"
+      assert Decimal.equal?(mock_res.amount, Decimal.new("40.00"))
+      assert mock_res.currency == "EUR"
+      assert %DateTime{} = mock_res.settled_at
+
+      # Fonctionne aussi par ID et via la map
+      assert {:ok, _} =
+               Expenses.mock_settle_transfer(closed_wallet.id, %{
+                 "from_id" => bob_member.id,
+                 "to_id" => alice_member.id,
+                 "amount" => "20.00"
+               })
+    end
+
+    test "mock_settle_transfer valide les identifiants de membres et montants" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+
+      # Même membre
+      assert {:error, :identical_members} =
+               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, alice_member.id, "10.00")
+
+      # Membre inexistant
+      assert {:error, :member_not_found} =
+               Expenses.mock_settle_transfer(closed_wallet, 999_999, alice_member.id, "10.00")
+
+      # Montant invalide ou négatif
+      assert {:error, :invalid_amount} =
+               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "-10.00")
+
+      assert {:error, :invalid_amount} =
+               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "0.00")
+    end
+
+    test "mock_settle_all/1 simule tous les virements et clôture automatiquement le porte-monnaie" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Trio Remboursement", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 90", amount: "90.00"})
+
+      # Rejeté si ouvert
+      assert {:error, :wallet_not_closed} = Expenses.mock_settle_all(wallet)
+
+      # Validation du porte-monnaie (Étape 2)
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+
+      # Succès : tous les virements sont réglés et le porte-monnaie est automatiquement clôturé
+      assert {:ok, simulated_list} = Expenses.mock_settle_all(pending_wallet)
+      assert length(simulated_list) == 2
+
+      Enum.each(simulated_list, fn s ->
+        assert s.status == "settled"
+        assert s.simulated == true
+        assert s.to_name == "Alice"
+        assert Decimal.equal?(s.amount, Decimal.new("30.00"))
+      end)
+
+      # Vérification de la clôture automatique en base
+      reloaded_wallet = Wallets.get_wallet!(wallet.id)
+      assert reloaded_wallet.status == "closed"
+      assert Wallets.closed?(reloaded_wallet)
+    end
+  end
+
+  describe "settle_transfer/5 (Persistance réelle en base et autorisation du débiteur)" do
+    test "seul le membre débiteur peut effectuer le virement et l'enregistrer en base" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Duo", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      # Invitation en attente pour tester la suppression à la clôture
+      dave = create_user(%{name: "Dave", email: "dave_settle@test.com"})
+      {:ok, _invitation} = Wallets.create_invitation(creator, wallet, %{email: dave.email})
+
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 100", amount: "100.00"})
+
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      # Rejeté si ouvert
+      assert {:error, :wallet_not_in_settlement} =
+               Expenses.settle_transfer(bob, wallet, bob_member.id, alice_member.id, "50.00")
+
+      # Validation
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+
+      # Alice (la créancière) ne peut pas effectuer le virement de Bob
+      assert {:error, :unauthorized} =
+               Expenses.settle_transfer(creator, pending_wallet, bob_member.id, alice_member.id, "50.00")
+
+      # Bob (le débiteur) effectue son virement
+      assert {:ok, res} =
+               Expenses.settle_transfer(bob, pending_wallet, bob_member.id, alice_member.id, "50.00")
+
+      assert res.status == "settled"
+      assert res.settled == true
+      assert Decimal.equal?(res.amount, Decimal.new("50.00"))
+
+      # Persistance en base vérifiée via list_settled_transfers
+      settled_records = Expenses.list_settled_transfers(wallet.id)
+      assert length(settled_records) == 1
+      [s] = settled_records
+      assert s.from_id == bob_member.id
+      assert s.to_id == alice_member.id
+      assert Decimal.equal?(s.amount, Decimal.new("50.00"))
+
+      # Comme c'était l'unique virement, le porte-monnaie s'est clôturé automatiquement
+      reloaded_wallet = Wallets.get_wallet!(wallet.id)
+      assert reloaded_wallet.status == "closed"
+
+      # Et les invitations existantes ont été supprimées
+      assert Wallets.list_pending_invitations_for_wallet(wallet.id) == []
     end
   end
 end

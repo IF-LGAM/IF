@@ -9,6 +9,7 @@ defmodule LesBonsComptes.Expenses do
   alias LesBonsComptes.Repo
   alias LesBonsComptes.Accounts.User
   alias LesBonsComptes.Expenses.Expense
+  alias LesBonsComptes.Expenses.Settlement
   alias LesBonsComptes.Wallets.Wallet
 
   @doc """
@@ -50,10 +51,15 @@ defmodule LesBonsComptes.Expenses do
     wallet = Repo.preload(wallet, [:members])
     user_member = Enum.find(wallet.members, &(&1.user_id == user.id))
 
-    if is_nil(user_member) do
-      {:error, :unauthorized}
-    else
-      payer_id = resolve_payer_id(attrs[:payer_id] || attrs["payer_id"], user_member.id)
+    cond do
+      wallet.status in ["pending_settlement", "closed"] ->
+        {:error, :wallet_closed}
+
+      is_nil(user_member) ->
+        {:error, :unauthorized}
+
+      true ->
+        payer_id = resolve_payer_id(attrs[:payer_id] || attrs["payer_id"], user_member.id)
 
       case validate_payer_in_wallet(wallet, payer_id, attrs) do
         :ok ->
@@ -153,7 +159,7 @@ defmodule LesBonsComptes.Expenses do
 
   @doc """
   Vérifie si un utilisateur a le droit de supprimer une dépense (IF-77, IF-79).
-  Autorisé si l'utilisateur est :
+  Autorisé UNIQUEMENT si le porte-monnaie est ouvert (en phase de déclaration) ET si l'utilisateur est :
   - le créateur de la dépense (`created_by_id == user.id`),
   - le compte dépenseur associé (`payer.user_id == user.id`),
   - ou le propriétaire du porte-monnaie (`wallet.creator_id == user.id`).
@@ -161,23 +167,32 @@ defmodule LesBonsComptes.Expenses do
   def can_delete_expense?(%User{} = user, %Expense{} = expense) do
     expense = Repo.preload(expense, [:wallet, :payer])
 
+    wallet_is_open = expense.wallet && expense.wallet.status == "open"
     is_creator_of_expense = expense.created_by_id == user.id
     is_payer_of_expense = expense.payer && expense.payer.user_id == user.id
     is_wallet_owner = expense.wallet && expense.wallet.creator_id == user.id
 
-    is_creator_of_expense or is_payer_of_expense or is_wallet_owner
+    wallet_is_open and (is_creator_of_expense or is_payer_of_expense or is_wallet_owner)
   end
 
   def can_delete_expense?(_, _), do: false
 
   @doc """
   Supprime une dépense après vérification des droits (IF-78, IF-79).
+  Rejette avec `{:error, :wallet_closed}` si le porte-monnaie n'est plus en phase de déclaration.
   """
   def delete_expense(%User{} = user, %Expense{} = expense) do
-    if can_delete_expense?(user, expense) do
-      Repo.delete(expense)
-    else
-      {:error, :unauthorized}
+    expense = Repo.preload(expense, [:wallet, :payer])
+
+    cond do
+      expense.wallet && expense.wallet.status != "open" ->
+        {:error, :wallet_closed}
+
+      can_delete_expense?(user, expense) ->
+        Repo.delete(expense)
+
+      true ->
+        {:error, :unauthorized}
     end
   end
 
@@ -185,6 +200,73 @@ defmodule LesBonsComptes.Expenses do
       when is_integer(expense_id) or is_binary(expense_id) do
     expense = get_expense!(expense_id)
     delete_expense(user, expense)
+  end
+
+  @doc """
+  Vérifie si un utilisateur a le droit de modifier une dépense.
+  Autorisé UNIQUEMENT si le porte-monnaie est ouvert (en phase de déclaration) ET si l'utilisateur est :
+  - la personne ayant ajouté la dépense (`created_by_id == user.id`),
+  - ou la personne ayant réalisé la dépense (`payer.user_id == user.id`).
+  """
+  def can_edit_expense?(%User{} = user, %Expense{} = expense) do
+    expense = Repo.preload(expense, [:wallet, :payer])
+
+    wallet_is_open = expense.wallet && expense.wallet.status == "open"
+    is_creator_of_expense = expense.created_by_id == user.id
+    is_payer_of_expense = expense.payer && expense.payer.user_id == user.id
+
+    wallet_is_open and (is_creator_of_expense or is_payer_of_expense)
+  end
+
+  def can_edit_expense?(_, _), do: false
+
+  @doc """
+  Met à jour une dépense après vérification des droits.
+  Seule la personne ayant ajouté la dépense ou le payeur associé peut la modifier,
+  et uniquement si le porte-monnaie est en phase de déclaration (ouvert).
+  """
+  def update_expense(%User{} = user, %Expense{} = expense, attrs) do
+    expense = Repo.preload(expense, [:wallet, :payer])
+    wallet = Repo.preload(expense.wallet, [:members])
+
+    cond do
+      is_nil(wallet) or wallet.status != "open" ->
+        {:error, :wallet_closed}
+
+      not can_edit_expense?(user, expense) ->
+        {:error, :unauthorized}
+
+      true ->
+        payer_id =
+          case attrs[:payer_id] || attrs["payer_id"] do
+            nil -> expense.payer_id
+            "" -> expense.payer_id
+            id when is_integer(id) -> id
+            id when is_binary(id) -> String.to_integer(id)
+          end
+
+        case validate_payer_in_wallet(wallet, payer_id, attrs) do
+          :ok ->
+            params =
+              attrs
+              |> Map.new(fn {k, v} -> {to_string(k), v} end)
+              |> Map.put("payer_id", payer_id)
+
+            expense
+            |> Expense.changeset(params)
+            |> Repo.update()
+            |> case do
+              {:ok, updated} ->
+                {:ok, Repo.preload(updated, [:payer, :created_by, :wallet], force: true)}
+
+              {:error, changeset} ->
+                {:error, changeset}
+            end
+
+          {:error, changeset} ->
+            {:error, changeset}
+        end
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -402,6 +484,7 @@ defmodule LesBonsComptes.Expenses do
       |> Enum.map(fn d ->
         %{
           id: d.member_id,
+          user_id: d.member && d.member.user_id,
           name: d.name,
           email: d.email,
           amount: d.amount_to_pay
@@ -414,6 +497,7 @@ defmodule LesBonsComptes.Expenses do
       |> Enum.map(fn c ->
         %{
           id: c.member_id,
+          user_id: c.member && c.member.user_id,
           name: c.name,
           email: c.email,
           amount: c.amount_to_receive
@@ -462,9 +546,11 @@ defmodule LesBonsComptes.Expenses do
       {[matched_creditor | other_matched], unmatched} ->
         transfer = %{
           from_id: debtor.id,
+          from_user_id: debtor.user_id,
           from_name: debtor.name,
           from_email: debtor.email,
           to_id: matched_creditor.id,
+          to_user_id: matched_creditor.user_id,
           to_name: matched_creditor.name,
           to_email: matched_creditor.email,
           amount: Decimal.round(debtor.amount, 2),
@@ -507,9 +593,11 @@ defmodule LesBonsComptes.Expenses do
 
         transfer = %{
           from_id: d.id,
+          from_user_id: d.user_id,
           from_name: d.name,
           from_email: d.email,
           to_id: c.id,
+          to_user_id: c.user_id,
           to_name: c.name,
           to_email: c.email,
           amount: Decimal.round(transfer_amount, 2),
@@ -586,4 +674,331 @@ defmodule LesBonsComptes.Expenses do
       }
     end)
   end
+
+  # ---------------------------------------------------------------------------
+  # Règlements de virements et persistance en base de données (IF-85)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Liste tous les règlements enregistrés en base de données pour un porte-monnaie donné.
+  """
+  def list_settled_transfers(wallet_id) when is_integer(wallet_id) or is_binary(wallet_id) do
+    from(s in Settlement,
+      where: s.wallet_id == ^wallet_id,
+      preload: [:from_member, :to_member],
+      order_by: [asc: s.settled_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Valide et enregistre un virement en base de données par son débiteur.
+  Règles métier :
+  - Le porte-monnaie doit être en cours de virements ("pending_settlement").
+  - Seul le membre débiteur (`from_member.user_id == user.id`) peut effectuer le virement.
+  - Le virement est persisté dans la table `settlements`.
+  - Si tous les virements sont effectués, le porte-monnaie est automatiquement clôturé.
+  - Diffuse une notification PubSub aux autres utilisateurs connectés.
+  """
+  def settle_transfer(%User{} = user, wallet_or_id, from_id, to_id, amount) do
+    case resolve_wallet_for_mock(wallet_or_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Wallet{status: status} when status != "pending_settlement" ->
+        {:error, :wallet_not_in_settlement}
+
+      %Wallet{} = wallet ->
+        do_settle_transfer(user, wallet, from_id, to_id, amount)
+    end
+  end
+
+  defp do_settle_transfer(%User{} = user, %Wallet{} = wallet, from_id, to_id, amount) do
+    with {:ok, parsed_from_id} <- parse_member_id(from_id),
+         {:ok, parsed_to_id} <- parse_member_id(to_id),
+         :ok <- validate_distinct_members(parsed_from_id, parsed_to_id),
+         {:ok, from_member} <- find_wallet_member(wallet, parsed_from_id),
+         {:ok, to_member} <- find_wallet_member(wallet, parsed_to_id),
+         :ok <- validate_debtor_user(user, from_member),
+         {:ok, dec_amount} <- parse_settle_amount(amount) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      settlement_params = %{
+        wallet_id: wallet.id,
+        from_id: from_member.id,
+        to_id: to_member.id,
+        amount: dec_amount,
+        currency: wallet.currency,
+        settled_at: now
+      }
+
+      case %Settlement{}
+           |> Settlement.changeset(settlement_params)
+           |> Repo.insert(
+             on_conflict: [set: [amount: dec_amount, settled_at: now]],
+             conflict_target: [:wallet_id, :from_id, :to_id]
+           ) do
+        {:ok, settlement} ->
+          settlements = calculate_settlements(wallet)
+          all_settled = list_settled_transfers(wallet.id)
+
+          all_completed? =
+            length(settlements) > 0 and
+              Enum.all?(settlements, fn s ->
+                Enum.any?(all_settled, &(&1.from_id == s.from_id and &1.to_id == s.to_id))
+              end)
+
+          if all_completed? do
+            {:ok, _closed_wallet} = LesBonsComptes.Wallets.close_wallet(wallet)
+          end
+
+          Phoenix.PubSub.broadcast(
+            LesBonsComptes.PubSub,
+            "wallet:#{wallet.id}",
+            {:wallet_updated, wallet.id}
+          )
+
+          {:ok,
+           %{
+             id: settlement.id,
+             wallet_id: wallet.id,
+             from_id: from_member.id,
+             from_name: from_member.name,
+             from_email: from_member.email,
+             to_id: to_member.id,
+             to_name: to_member.name,
+             to_email: to_member.email,
+             amount: dec_amount,
+             currency: wallet.currency,
+             status: "settled",
+             settled: true,
+             simulated: true,
+             settled_at: settlement.settled_at
+           }}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
+    end
+  end
+
+  defp validate_debtor_user(%User{id: user_id}, %{user_id: member_user_id}) do
+    if member_user_id == user_id do
+      :ok
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc """
+  Exécute une action de remboursement simulé (mock) pour un porte-monnaie clos (IF-85).
+  Prend en paramètre un porte-monnaie (%Wallet{} ou id) et une map d'attributs (%{from_id: ..., to_id: ..., amount: ...}).
+  """
+  def mock_settle_transfer(wallet_or_id, params) when is_map(params) do
+    from_id = params[:from_id] || params["from_id"]
+    to_id = params[:to_id] || params["to_id"]
+    amount = params[:amount] || params["amount"]
+
+    mock_settle_transfer(wallet_or_id, from_id, to_id, amount)
+  end
+
+  @doc """
+  Exécute une action de règlement de virement entre deux membres pour un montant donné (IF-85).
+  Règles métier :
+  - Le porte-monnaie doit exister.
+  - Le porte-monnaie doit être validé ou clos (status in ["pending_settlement", "closed"]). S'il est ouvert, retourne `{:error, :wallet_not_closed}`.
+  - Les membres émetteur et récepteur doivent appartenir au porte-monnaie et être distincts.
+  - Le montant doit être supérieur à zéro.
+  """
+  def mock_settle_transfer(wallet_or_id, from_id, to_id, amount) do
+    case resolve_wallet_for_mock(wallet_or_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Wallet{status: "open"} ->
+        {:error, :wallet_not_closed}
+
+      %Wallet{} = wallet ->
+        do_mock_settle_transfer(wallet, from_id, to_id, amount)
+    end
+  end
+
+  @doc """
+  Enregistre le règlement de l'ensemble des remboursements proposés pour un porte-monnaie validé ou clos.
+  Retourne `{:ok, settlements}` ou `{:error, reason}`.
+  """
+  def mock_settle_all(wallet_or_id) do
+    case resolve_wallet_for_mock(wallet_or_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Wallet{status: "open"} ->
+        {:error, :wallet_not_closed}
+
+      %Wallet{} = wallet ->
+        settlements = calculate_settlements(wallet)
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        # Enregistrer en base de données
+        Enum.each(settlements, fn s ->
+          %Settlement{}
+          |> Settlement.changeset(%{
+            wallet_id: wallet.id,
+            from_id: s.from_id,
+            to_id: s.to_id,
+            amount: s.amount,
+            currency: s.currency,
+            settled_at: now
+          })
+          |> Repo.insert(
+            on_conflict: [set: [amount: s.amount, settled_at: now]],
+            conflict_target: [:wallet_id, :from_id, :to_id]
+          )
+        end)
+
+        # Clôture automatique du porte-monnaie lorsque tous les virements sont réalisés
+        {:ok, _closed_wallet} = LesBonsComptes.Wallets.close_wallet(wallet)
+
+        Phoenix.PubSub.broadcast(
+          LesBonsComptes.PubSub,
+          "wallet:#{wallet.id}",
+          {:wallet_updated, wallet.id}
+        )
+
+        simulated =
+          Enum.map(settlements, fn s ->
+            %{
+              id: "mock_#{s.from_id}_#{s.to_id}",
+              wallet_id: wallet.id,
+              from_id: s.from_id,
+              from_name: s.from_name,
+              from_email: s.from_email,
+              to_id: s.to_id,
+              to_name: s.to_name,
+              to_email: s.to_email,
+              amount: s.amount,
+              currency: s.currency,
+              status: "settled",
+              settled: true,
+              simulated: true,
+              settled_at: now
+            }
+          end)
+
+        {:ok, simulated}
+    end
+  end
+
+  defp resolve_wallet_for_mock(%Wallet{id: id}) when not is_nil(id) do
+    case Repo.get(Wallet, id) do
+      nil -> nil
+      wallet -> Repo.preload(wallet, [:members])
+    end
+  end
+
+  defp resolve_wallet_for_mock(id) when is_integer(id) do
+    case Repo.get(Wallet, id) do
+      nil -> nil
+      wallet -> Repo.preload(wallet, [:members])
+    end
+  end
+
+  defp resolve_wallet_for_mock(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int_id, ""} -> resolve_wallet_for_mock(int_id)
+      _ -> nil
+    end
+  end
+
+  defp resolve_wallet_for_mock(_), do: nil
+
+  defp do_mock_settle_transfer(%Wallet{} = wallet, from_id, to_id, amount) do
+    with {:ok, parsed_from_id} <- parse_member_id(from_id),
+         {:ok, parsed_to_id} <- parse_member_id(to_id),
+         :ok <- validate_distinct_members(parsed_from_id, parsed_to_id),
+         {:ok, from_member} <- find_wallet_member(wallet, parsed_from_id),
+         {:ok, to_member} <- find_wallet_member(wallet, parsed_to_id),
+         {:ok, dec_amount} <- parse_settle_amount(amount) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      settlement_params = %{
+        wallet_id: wallet.id,
+        from_id: from_member.id,
+        to_id: to_member.id,
+        amount: dec_amount,
+        currency: wallet.currency,
+        settled_at: now
+      }
+
+      {:ok, settlement} =
+        %Settlement{}
+        |> Settlement.changeset(settlement_params)
+        |> Repo.insert(
+          on_conflict: [set: [amount: dec_amount, settled_at: now]],
+          conflict_target: [:wallet_id, :from_id, :to_id]
+        )
+
+      result = %{
+        id: settlement.id,
+        wallet_id: wallet.id,
+        from_id: from_member.id,
+        from_name: from_member.name,
+        from_email: from_member.email,
+        to_id: to_member.id,
+        to_name: to_member.name,
+        to_email: to_member.email,
+        amount: dec_amount,
+        currency: wallet.currency,
+        status: "settled",
+        settled: true,
+        simulated: true,
+        settled_at: settlement.settled_at
+      }
+
+      {:ok, result}
+    end
+  end
+
+  defp parse_member_id(id) when is_integer(id), do: {:ok, id}
+
+  defp parse_member_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int_id, ""} -> {:ok, int_id}
+      _ -> {:error, :invalid_member_id}
+    end
+  end
+
+  defp parse_member_id(_), do: {:error, :invalid_member_id}
+
+  defp validate_distinct_members(id, id), do: {:error, :identical_members}
+  defp validate_distinct_members(_, _), do: :ok
+
+  defp find_wallet_member(%Wallet{members: members}, member_id) do
+    case Enum.find(members || [], &(&1.id == member_id)) do
+      nil -> {:error, :member_not_found}
+      member -> {:ok, member}
+    end
+  end
+
+  defp parse_settle_amount(%Decimal{} = dec) do
+    if Decimal.gt?(dec, Decimal.new("0.00")) do
+      {:ok, Decimal.round(dec, 2)}
+    else
+      {:error, :invalid_amount}
+    end
+  end
+
+  defp parse_settle_amount(num) when is_number(num) do
+    parse_settle_amount(Decimal.from_float(num * 1.0))
+  end
+
+  defp parse_settle_amount(str) when is_binary(str) do
+    case Decimal.parse(str) do
+      {dec, ""} -> parse_settle_amount(dec)
+      _ -> {:error, :invalid_amount}
+    end
+  end
+
+  defp parse_settle_amount(_), do: {:error, :invalid_amount}
 end
+

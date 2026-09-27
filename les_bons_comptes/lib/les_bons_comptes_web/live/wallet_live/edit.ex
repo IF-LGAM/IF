@@ -11,23 +11,34 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
     wallet = Wallets.get_wallet!(id)
     current_user = socket.assigns.current_user
 
-    if Wallets.owner?(wallet, current_user) do
-      changeset = Wallets.change_wallet(wallet)
-      available_users = compute_available_users(wallet, current_user)
+    cond do
+      wallet.status != "open" ->
+        {:ok,
+         socket
+         |> put_flash(
+           :error,
+           "Impossible de modifier un porte-monnaie en cours de virement ou clôturé."
+         )
+         |> push_navigate(to: ~p"/wallets/#{wallet.id}")}
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Modifier #{wallet.name} - Les Bons Comptes")
-       |> assign(:wallet, wallet)
-       |> assign(:form, to_form(changeset))
-       |> assign(:available_users, available_users)
-       |> assign(:custom_email, "")
-       |> assign(:participant_error, nil)}
-    else
-      {:ok,
-       socket
-       |> put_flash(:error, "Seul le propriétaire peut modifier ce porte-monnaie.")
-       |> push_navigate(to: ~p"/wallets/#{wallet.id}")}
+      not Wallets.owner?(wallet, current_user) ->
+        {:ok,
+         socket
+         |> put_flash(:error, "Seul le propriétaire peut modifier ce porte-monnaie.")
+         |> push_navigate(to: ~p"/wallets/#{wallet.id}")}
+
+      true ->
+        changeset = Wallets.change_wallet(wallet)
+        available_users = compute_available_users(wallet, current_user)
+
+        {:ok,
+         socket
+         |> assign(:page_title, "Modifier #{wallet.name} - Les Bons Comptes")
+         |> assign(:wallet, wallet)
+         |> assign(:form, to_form(changeset))
+         |> assign(:available_users, available_users)
+         |> assign(:custom_email, "")
+         |> assign(:participant_error, nil)}
     end
   end
 
@@ -55,6 +66,15 @@ defmodule LesBonsComptesWeb.WalletLive.Edit do
            "Le porte-monnaie « #{updated_wallet.name} » a été modifié avec succès."
          )
          |> push_navigate(to: ~p"/wallets/#{updated_wallet.id}")}
+
+      {:error, :wallet_closed} ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :error,
+           "Impossible de modifier un porte-monnaie en cours de virement ou clôturé."
+         )
+         |> push_navigate(to: ~p"/wallets/#{wallet.id}")}
 
       {:error, :unauthorized} ->
         {:noreply,

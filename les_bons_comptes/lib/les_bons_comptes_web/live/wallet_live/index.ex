@@ -31,6 +31,17 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
          |> assign(:wallets, wallets)
          |> assign(:pending_invitations, pending_invitations)}
 
+      {:error, :invitations_disabled} ->
+        pending_invitations = Wallets.list_pending_invitations_for_user(user.id)
+
+        {:noreply,
+         socket
+         |> put_flash(
+           :error,
+           "Impossible d'accepter cette invitation : le porte-monnaie n'est plus en phase de déclaration."
+         )
+         |> assign(:pending_invitations, pending_invitations)}
+
       {:error, reason} ->
         {:noreply,
          put_flash(socket, :error, "Impossible d'accepter l'invitation : #{inspect(reason)}")}

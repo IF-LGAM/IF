@@ -707,10 +707,20 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert rendered_item =~ "50.00 EUR"
       assert rendered_item =~ "Virement conseillé"
 
-      # Bouton de simulation disponible
-      assert has_element?(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
-      assert element(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}") |> render() =~
-               "Simuler le virement"
+      # Le bouton n'est pas affiché tant que le porte-monnaie est ouvert (Étape 1)
+      refute has_element?(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+
+      # Une fois validé (Étape 2), le créancier (Alice) ne voit pas le bouton
+      {:ok, _} = Wallets.validate_wallet(owner, wallet)
+      {:ok, view_stage2, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+      refute has_element?(view_stage2, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+
+      # Le débiteur (Bob) voit le bouton de règlement
+      bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
+      {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
+      assert has_element?(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+      assert element(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}") |> render() =~
+               "Marquer comme réglé"
     end
 
     test "affiche un état vide informatif quand aucune dépense n'existe", %{conn: conn} do
@@ -758,12 +768,13 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#wallet-settlements-list")
     end
 
-    test "permet de simuler un virement (remboursement mock) puis de réinitialiser", %{conn: conn} do
-      owner = create_user(%{name: "Alice", email: "alice_sim@test.com"})
-      bob = create_user(%{name: "Bob", email: "bob_sim@test.com"})
+    test "cycle complet en 3 étapes : déclarations (étape 1), validation et virements réglés (étape 2), puis clôture (étape 3)",
+         %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_ski@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_ski@test.com"})
 
       {:ok, wallet} =
-        Wallets.create_wallet(owner, %{name: "Simulation Ski", currency: "EUR"}, [
+        Wallets.create_wallet(owner, %{name: "Weekend Ski", currency: "EUR"}, [
           %{name: "Bob", email: bob.email, user_id: bob.id}
         ])
 
@@ -779,35 +790,168 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       btn_id = "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}"
       badge_id = "#mock-settled-badge-#{bob_member.id}-#{alice_member.id}"
 
-      assert has_element?(view, btn_id)
-      refute has_element?(view, badge_id)
-      refute has_element?(view, "#reset-mock-settlements-btn")
+      # -----------------------------------------------------------------------
+      # ÉTAPE 1 : Déclarations en cours (statut Ouvert)
+      # -----------------------------------------------------------------------
+      assert has_element?(view, "#wallet-status-badge", "Ouvert")
+      assert has_element?(view, "#wallet-lifecycle-stepper")
+      assert has_element?(view, "#wallet-open-notice")
+      assert has_element?(view, "#validate-wallet-btn")
+      assert has_element?(view, "#add-expense-btn")
+      assert has_element?(view, "#settlements-summary")
+      assert element(view, "#settlement-progress-badge") |> render() =~ "0 / 1 virement(s) réglé(s)"
 
-      # 1. Clic sur Simuler le virement
-      view
-      |> element(btn_id)
-      |> render_click()
-
-      # Notification flash affichée
-      assert render(view) =~ "Simulation : Virement de 60.00 EUR de Bob vers Alice marqué comme réglé."
-
-      # Le bouton a disparu et est remplacé par le badge
+      # Exigence 1 : Aucun bouton de règlement n'est affiché quand le porte-monnaie est ouvert
       refute has_element?(view, btn_id)
-      assert has_element?(view, badge_id)
-      assert element(view, badge_id) |> render() =~ "Réglé (Simulation)"
-
-      # Le bouton de réinitialisation apparaît
-      assert has_element?(view, "#reset-mock-settlements-btn")
-
-      # 2. Clic sur Réinitialiser les simulations
-      view
-      |> element("#reset-mock-settlements-btn")
-      |> render_click()
-
-      assert render(view) =~ "Les simulations de remboursements ont été réinitialisées."
-      assert has_element?(view, btn_id)
       refute has_element?(view, badge_id)
+
+      # Exigence 2 : Aucun mot "simul" dans l'interface
+      refute render(view) =~ "simul"
+      assert render(view) =~ "Répartition des remboursements"
+      assert render(view) =~ "Restant à régler"
+
+      # -----------------------------------------------------------------------
+      # TRANSITION : Validation du porte-monnaie par le propriétaire -> Étape 2
+      # -----------------------------------------------------------------------
+      view |> element("#validate-wallet-btn") |> render_click()
+
+      assert render(view) =~ "Le porte-monnaie « Weekend Ski » a été validé."
+      assert has_element?(view, "#wallet-status-badge", "Attente des virements")
+      refute has_element?(view, "#wallet-open-notice")
+      refute has_element?(view, "#add-expense-btn")
+
+      # -----------------------------------------------------------------------
+      # ÉTAPE 2 : Attente des virements (les boutons de virement apparaissent)
+      # -----------------------------------------------------------------------
+      # Avant tout règlement : le bouton de réouverture est présent et aucun bouton clôturer n'existe
+      assert has_element?(view, "#reopen-wallet-btn")
+      refute has_element?(view, "#close-wallet-btn")
+
+      # Alice (créancière) ne peut pas régler le virement
+      refute has_element?(view, btn_id)
+
+      # Bob (débiteur) se connecte et voit le bouton
+      bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
+      {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
+      assert has_element?(bob_view, btn_id)
+      assert element(bob_view, btn_id) |> render() =~ "Marquer comme réglé"
+
+      # Bob clique sur "Marquer comme réglé"
+      bob_view |> element(btn_id) |> render_click()
+
+      # Notification flash de clôture automatique définitive reçue par Bob
+      assert render(bob_view) =~ "Dernier virement de 60.00 EUR de Bob vers Alice réglé !"
+      assert render(bob_view) =~ "le porte-monnaie est désormais clôturé définitivement."
+
+      # Le bouton a disparu et est remplacé par le badge "Réglé"
+      refute has_element?(bob_view, btn_id)
+      assert has_element?(bob_view, badge_id)
+      assert element(bob_view, badge_id) |> render() =~ "Réglé"
+      refute element(bob_view, badge_id) |> render() =~ "Simulation"
+
+      # La répartition des remboursements est mise à jour (100% réglé)
+      assert element(bob_view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) réglé(s)"
+      assert element(bob_view, "#summary-settled-amount") |> render() =~ "60.00 EUR"
+      assert element(bob_view, "#summary-remaining-amount") |> render() =~ "0.00 EUR"
+      assert has_element?(bob_view, "#all-settlements-completed-message")
+      assert render(bob_view) =~ "Tous les remboursements ont été effectués avec succès !"
+      assert render(bob_view) =~ "Le porte-monnaie est désormais définitivement clôturé"
+
+      # Synchronisation PubSub en temps réel sur la vue d'Alice
+      assert has_element?(view, badge_id)
+      assert element(view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) réglé(s)"
+
+      # -----------------------------------------------------------------------
+      # ÉTAPE 3 : Clôture automatique et stricte irréversibilité
+      # -----------------------------------------------------------------------
+      # Le porte-monnaie est automatiquement passé au statut Clos
+      assert has_element?(view, "#wallet-status-badge", "Clos")
+      assert Wallets.get_wallet!(wallet.id).status == "closed"
+
+      # Aucun bouton de clôture manuelle, de réinitialisation ni de réouverture n'existe
+      refute has_element?(view, "#close-wallet-btn")
       refute has_element?(view, "#reset-mock-settlements-btn")
+      refute has_element?(view, "#reopen-wallet-btn")
+
+      # Tentative de réouverture impossible
+      render_click(view, "reopen_wallet", %{})
+      assert render(view) =~ "La clôture de ce porte-monnaie est définitive."
+    end
+
+    test "la réouverture en Étape 2 est autorisée tant qu'aucun virement n'a été effectué, puis devient impossible dès qu'un virement a été fait",
+         %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_reopen_test@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_reopen_test@test.com"})
+      charlie = create_user(%{name: "Charlie", email: "charlie_reopen_test@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Test Irréversibilité", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      # Alice paie 90€ -> Bob doit 30€ et Charlie doit 30€
+      {:ok, _} = Expenses.create_expense(owner, wallet, %{title: "Repas commun", amount: "90.00"})
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      # Validation par le propriétaire -> Étape 2
+      view |> element("#validate-wallet-btn") |> render_click()
+      assert has_element?(view, "#wallet-status-badge", "Attente des virements")
+
+      # Avant tout virement : le bouton de réouverture est présent
+      assert has_element?(view, "#reopen-wallet-btn")
+
+      # On effectue 1 virement sur 2 (Bob règle à Alice)
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      charlie_member = Enum.find(wallet.members, &(&1.name == "Charlie"))
+
+      bob_btn = "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}"
+      charlie_btn = "#mock-settle-btn-#{charlie_member.id}-#{alice_member.id}"
+
+      # Bob effectue son virement
+      bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
+      {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
+      bob_view |> element(bob_btn) |> render_click()
+
+      # Après un premier virement : le virement est définitif, la réouverture disparaît de l'UI pour Alice
+      refute has_element?(view, "#reopen-wallet-btn")
+
+      # Toute tentative d'envoi de l'événement de réouverture est refusée
+      render_click(view, "reopen_wallet", %{})
+      assert render(view) =~ "Impossible d&#39;annuler la validation : des virements ont déjà été effectués et sont définitifs."
+
+      # Le deuxième virement est effectué par Charlie -> Clôture automatique !
+      charlie_conn = authenticate_user(Phoenix.ConnTest.build_conn(), charlie)
+      {:ok, charlie_view, _html} = live(charlie_conn, ~p"/wallets/#{wallet.id}")
+      charlie_view |> element(charlie_btn) |> render_click()
+
+      assert has_element?(view, "#wallet-status-badge", "Clos")
+      assert Wallets.get_wallet!(wallet.id).status == "closed"
+      refute has_element?(view, "#reopen-wallet-btn")
+      refute has_element?(view, "#close-wallet-btn")
+    end
+
+    test "un membre non propriétaire ne voit pas les boutons pour valider, clore ou rouvrir le porte-monnaie",
+         %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_non_owner@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_non_owner@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Groupe Amis", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      conn = authenticate_user(conn, bob)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      refute has_element?(view, "#validate-wallet-btn")
+      refute has_element?(view, "#close-wallet-btn")
+      refute has_element?(view, "#reopen-wallet-btn")
+      refute has_element?(view, "#notice-validate-wallet-btn")
+      refute has_element?(view, "#notice-close-wallet-btn")
     end
   end
 

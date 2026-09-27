@@ -40,6 +40,7 @@ defmodule LesBonsComptesWeb.Router do
       live "/wallets/:id", WalletLive.Show, :show
       live "/wallets/:id/edit", WalletLive.Edit, :edit
       live "/wallets/:id/expenses/new", WalletLive.ExpenseNew, :new
+      live "/wallets/:id/expenses/:expense_id/edit", WalletLive.ExpenseEdit, :edit
     end
   end
 
@@ -48,6 +49,7 @@ defmodule LesBonsComptesWeb.Router do
     pipe_through :api
 
     get "/wallets/:id/settlements", SettlementController, :index
+    post "/wallets/:id/settlements/mock", SettlementController, :mock
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

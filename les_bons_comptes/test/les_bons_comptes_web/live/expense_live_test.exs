@@ -273,5 +273,135 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       assert render(view_charlie) =~ "pas autorisé à supprimer cette dépense"
       assert Expenses.get_expense!(expense.id) != nil
     end
+
+    test "masque le bouton de suppression et rejette la suppression hors phase de déclaration", %{conn: conn} do
+      %{creator: creator, wallet: wallet} = setup_wallet()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
+
+      # Validation -> Étape 2
+      {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
+
+      conn = authenticate_user(conn, creator)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      refute has_element?(view, "#delete-expense-btn-#{expense.id}")
+
+      # Tentative directe de suppression par événement
+      render_click(view, "delete_expense", %{"id" => to_string(expense.id)})
+      assert render(view) =~ "Impossible de supprimer une dépense lorsque le porte-monnaie n&#39;est plus en phase de déclaration"
+      assert Expenses.get_expense!(expense.id) != nil
+    end
+  end
+
+  describe "Modification de dépense (ExpenseEdit LiveView)" do
+    test "affiche le bouton de modification uniquement pour l'auteur ou le payeur en phase ouverte", %{conn: conn} do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet()
+      charlie = create_user(%{name: "Charlie", email: "charlie_edit@test.com"})
+
+      {:ok, _member} =
+        Wallets.add_member(creator, wallet, %{
+          name: "Charlie",
+          email: charlie.email,
+          user_id: charlie.id
+        })
+
+      # Bob est le créateur et le payeur
+      {:ok, expense1} = Expenses.create_expense(bob, wallet, %{title: "Dépense Bob", amount: "20.00"})
+
+      # Bob voit le bouton d'édition
+      conn_bob = authenticate_user(conn, bob)
+      {:ok, view_bob, _html} = live(conn_bob, ~p"/wallets/#{wallet.id}")
+      assert has_element?(view_bob, "#edit-expense-btn-#{expense1.id}")
+
+      # Charlie ne voit pas le bouton d'édition
+      conn_charlie = authenticate_user(conn, charlie)
+      {:ok, view_charlie, _html} = live(conn_charlie, ~p"/wallets/#{wallet.id}")
+      refute has_element?(view_charlie, "#edit-expense-btn-#{expense1.id}")
+
+      # Alice (créatrice du wallet mais pas auteur/payeur de cette dépense) ne voit pas le bouton
+      conn_alice = authenticate_user(conn, creator)
+      {:ok, view_alice, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
+      refute has_element?(view_alice, "#edit-expense-btn-#{expense1.id}")
+
+      # Cas où l'auteur et le payeur sont distincts : Alice ajoute pour Bob
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      {:ok, expense2} = Expenses.create_expense(creator, wallet, %{title: "Cadeau", amount: "50.00", payer_id: bob_member.id})
+
+      # Alice (qui a ajouté) voit le bouton d'édition
+      {:ok, view_alice2, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
+      assert has_element?(view_alice2, "#edit-expense-btn-#{expense2.id}")
+
+      # Bob (qui est le compte payeur) voit aussi le bouton d'édition
+      {:ok, view_bob2, _html} = live(conn_bob, ~p"/wallets/#{wallet.id}")
+      assert has_element?(view_bob2, "#edit-expense-btn-#{expense2.id}")
+    end
+
+    test "masque le bouton de modification hors phase de déclaration", %{conn: conn} do
+      %{creator: creator, wallet: wallet} = setup_wallet()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
+
+      {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
+
+      conn = authenticate_user(conn, creator)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+      refute has_element?(view, "#edit-expense-btn-#{expense.id}")
+    end
+
+    test "permet de modifier avec succès une dépense via le formulaire ExpenseEdit", %{conn: conn} do
+      %{creator: creator, wallet: wallet} = setup_wallet()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Ancien titre", amount: "40.00"})
+
+      conn = authenticate_user(conn, creator)
+      {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/expenses/#{expense.id}/edit")
+
+      assert has_element?(edit_view, "#expense-form")
+      assert has_element?(edit_view, "#expense-title-input[value='Ancien titre']")
+
+      # Modification et soumission
+      edit_view
+      |> form("#expense-form", expense: %{title: "Nouveau titre", amount: "55.00"})
+      |> render_submit()
+
+      assert_redirect(edit_view, ~p"/wallets/#{wallet.id}")
+
+      reloaded = Expenses.get_expense!(expense.id)
+      assert reloaded.title == "Nouveau titre"
+      assert Decimal.equal?(reloaded.amount, Decimal.new("55.00"))
+    end
+
+    test "redirige avec un message d'erreur si l'utilisateur n'est pas autorisé", %{conn: conn} do
+      %{creator: creator, wallet: wallet} = setup_wallet()
+      charlie = create_user(%{name: "Charlie", email: "charlie_unauth@test.com"})
+
+      {:ok, _member} =
+        Wallets.add_member(creator, wallet, %{
+          name: "Charlie",
+          email: charlie.email,
+          user_id: charlie.id
+        })
+
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Privé", amount: "30.00"})
+
+      conn_charlie = authenticate_user(conn, charlie)
+      assert {:error, {:live_redirect, %{to: to, flash: %{"error" => msg}}}} =
+               live(conn_charlie, ~p"/wallets/#{wallet.id}/expenses/#{expense.id}/edit")
+
+      assert to == ~p"/wallets/#{wallet.id}"
+      assert msg =~ "pas autorisé à modifier cette dépense"
+    end
+
+    test "redirige avec un message d'erreur si le porte-monnaie n'est plus en phase de déclaration", %{conn: conn} do
+      %{creator: creator, wallet: wallet} = setup_wallet()
+      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
+
+      {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
+
+      conn = authenticate_user(conn, creator)
+      assert {:error, {:live_redirect, %{to: to, flash: %{"error" => msg}}}} =
+               live(conn, ~p"/wallets/#{wallet.id}/expenses/#{expense.id}/edit")
+
+      assert to == ~p"/wallets/#{wallet.id}"
+      assert msg =~ "n'est plus en phase de déclaration"
+    end
   end
 end
