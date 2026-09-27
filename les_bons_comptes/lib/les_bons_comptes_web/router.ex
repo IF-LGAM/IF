@@ -40,6 +40,7 @@ defmodule LesBonsComptesWeb.Router do
       live "/wallets/:id", WalletLive.Show, :show
       live "/wallets/:id/edit", WalletLive.Edit, :edit
       live "/wallets/:id/expenses/new", WalletLive.ExpenseNew, :new
+      live "/wallets/:id/expenses/:expense_id/edit", WalletLive.ExpenseEdit, :edit
     end
   end
 

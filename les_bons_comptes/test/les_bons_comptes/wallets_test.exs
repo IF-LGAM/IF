@@ -180,6 +180,19 @@ defmodule LesBonsComptes.WalletsTest do
 
       assert "ce champ est obligatoire" in errors_on(changeset).name
     end
+
+    test "refuse la modification si le porte-monnaie est en cours de virement ou clos" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Porte-monnaie"})
+
+      {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
+      assert {:error, :wallet_closed} = Wallets.update_wallet(owner, pending_wallet, %{name: "Modif"})
+      assert {:error, :wallet_closed} = Wallets.update_wallet(pending_wallet, %{name: "Modif"})
+
+      {:ok, closed_wallet} = Wallets.close_wallet(owner, pending_wallet)
+      assert {:error, :wallet_closed} = Wallets.update_wallet(owner, closed_wallet, %{name: "Modif"})
+      assert {:error, :wallet_closed} = Wallets.update_wallet(closed_wallet, %{name: "Modif"})
+    end
   end
 
   describe "delete_wallet/2" do
@@ -500,6 +513,38 @@ defmodule LesBonsComptes.WalletsTest do
       invalid_changeset = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "invalid_status"})
       refute invalid_changeset.valid?
       assert "statut invalide" in errors_on(invalid_changeset).status
+    end
+
+    test "les invitations existantes ne fonctionnent plus en phase de virement" do
+      owner = create_user()
+      invitee = create_user(%{email: "invitee_phase2@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "En Virement"})
+      {:ok, invitation} = Wallets.create_invitation(owner, wallet, %{email: invitee.email})
+
+      {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
+
+      # Création refusée
+      other = create_user(%{email: "other_phase2@test.com"})
+      assert {:error, :invitations_disabled} =
+               Wallets.create_invitation(owner, pending_wallet, %{email: other.email})
+
+      # Acceptation de l'invitation existante refusée
+      assert {:error, :invitations_disabled} =
+               Wallets.accept_invitation(invitee, invitation.id)
+    end
+
+    test "les invitations existantes sont supprimées à la clôture du porte-monnaie" do
+      owner = create_user()
+      invitee = create_user(%{email: "invitee_close@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Avec Invitations"})
+      {:ok, invitation} = Wallets.create_invitation(owner, wallet, %{email: invitee.email})
+
+      assert Wallets.list_pending_invitations_for_wallet(wallet.id) != []
+
+      {:ok, _closed} = Wallets.close_wallet(owner, wallet)
+
+      assert Wallets.list_pending_invitations_for_wallet(wallet.id) == []
+      assert_raise Ecto.NoResultsError, fn -> Wallets.get_invitation!(invitation.id) end
     end
   end
 end

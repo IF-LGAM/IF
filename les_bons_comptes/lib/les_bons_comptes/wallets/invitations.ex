@@ -15,30 +15,34 @@ defmodule LesBonsComptes.Wallets.Invitations do
   n'est pas déjà membre, et n'a pas déjà d'invitation en attente.
   """
   def create(%User{} = inviter, %Wallet{} = wallet, attrs) do
-    email = attrs[:email] || attrs["email"]
-    wallet = Repo.preload(wallet, [:members])
+    if wallet.status != "open" do
+      {:error, :invitations_disabled}
+    else
+      email = attrs[:email] || attrs["email"]
+      wallet = Repo.preload(wallet, [:members])
 
-    with :ok <- validate_permissions(inviter, wallet),
-         {:ok, invitee} <- Members.validate_new_participant(wallet.members, inviter, email),
-         :ok <- validate_not_already_invited(wallet.id, invitee.id) do
-      %WalletInvitation{
-        wallet_id: wallet.id,
-        inviter_id: inviter.id,
-        invitee_id: invitee.id
-      }
-      |> WalletInvitation.changeset(%{
-        email: invitee.email,
-        status: "pending"
-      })
-      |> Repo.insert()
-      |> case do
-        {:ok, invitation} ->
-          invitation = Repo.preload(invitation, [:wallet, :inviter, :invitee])
-          _ = InvitationNotifier.deliver_invitation(invitation, wallet, inviter)
-          {:ok, invitation}
+      with :ok <- validate_permissions(inviter, wallet),
+           {:ok, invitee} <- Members.validate_new_participant(wallet.members, inviter, email),
+           :ok <- validate_not_already_invited(wallet.id, invitee.id) do
+        %WalletInvitation{
+          wallet_id: wallet.id,
+          inviter_id: inviter.id,
+          invitee_id: invitee.id
+        }
+        |> WalletInvitation.changeset(%{
+          email: invitee.email,
+          status: "pending"
+        })
+        |> Repo.insert()
+        |> case do
+          {:ok, invitation} ->
+            invitation = Repo.preload(invitation, [:wallet, :inviter, :invitee])
+            _ = InvitationNotifier.deliver_invitation(invitation, wallet, inviter)
+            {:ok, invitation}
 
-        {:error, changeset} ->
-          {:error, changeset}
+          {:error, changeset} ->
+            {:error, changeset}
+        end
       end
     end
   end
@@ -108,9 +112,14 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   def accept(%User{} = user, %WalletInvitation{} = invitation) do
+    invitation = Repo.preload(invitation, [:wallet])
+
     cond do
       invitation.invitee_id != user.id ->
         {:error, :unauthorized}
+
+      invitation.wallet && invitation.wallet.status != "open" ->
+        {:error, :invitations_disabled}
 
       invitation.status != "pending" ->
         {:error, :already_processed}

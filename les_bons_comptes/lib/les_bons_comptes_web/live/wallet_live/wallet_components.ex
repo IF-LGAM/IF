@@ -286,6 +286,8 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   attr :expense, :map, required: true
   attr :can_delete, :boolean, default: false
   attr :delete_event, :string, default: "delete_expense"
+  attr :can_edit, :boolean, default: false
+  attr :edit_link, :string, default: nil
 
   def expense_item(assigns) do
     payer_name = (assigns.expense.payer && assigns.expense.payer.name) || "Inconnu"
@@ -312,6 +314,17 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
         <span class="text-base font-bold text-primary">
           {format_amount(@expense.amount)} {@expense.currency}
         </span>
+
+        <%= if @can_edit and @edit_link do %>
+          <.link
+            navigate={@edit_link}
+            id={"edit-expense-btn-#{@expense.id}"}
+            class="btn btn-ghost btn-circle btn-xs text-primary hover:bg-primary/10"
+            title="Modifier cette dépense"
+          >
+            <.icon name="hero-pencil" class="size-4" />
+          </.link>
+        <% end %>
 
         <%= if @can_delete do %>
           <button
@@ -443,9 +456,19 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   attr :is_mock_settled, :boolean, default: false
   attr :status, :string, default: "open"
   attr :is_closed, :boolean, default: false
+  attr :current_user, :any, default: nil
 
   def settlement_item(assigns) do
-    can_settle = assigns.is_closed or assigns.status in ["pending_settlement", "closed"]
+    is_debtor =
+      not is_nil(assigns[:current_user]) and
+        not is_nil(assigns.settlement[:from_user_id]) and
+        assigns.current_user.id == assigns.settlement.from_user_id
+
+    can_settle =
+      (assigns.status == "pending_settlement" or assigns.is_closed) and
+        not assigns.is_mock_settled and
+        is_debtor
+
     assigns = assign(assigns, :can_settle, can_settle)
 
     ~H"""
@@ -516,6 +539,8 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
               <.icon name="hero-check" class="size-3.5" />
               <span>Marquer comme réglé</span>
             </button>
+          <% else %>
+            <span class="text-xs text-base-content/50 italic">En attente du virement</span>
           <% end %>
         <% end %>
       </div>

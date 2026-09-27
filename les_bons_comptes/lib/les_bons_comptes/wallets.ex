@@ -54,6 +54,9 @@ defmodule LesBonsComptes.Wallets do
   defdelegate mock_settle_transfer(wallet_or_id, from_id, to_id, amount),
     to: LesBonsComptes.Expenses
   defdelegate mock_settle_all(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate settle_transfer(user, wallet_or_id, from_id, to_id, amount),
+    to: LesBonsComptes.Expenses
+  defdelegate list_settled_transfers(wallet_id), to: LesBonsComptes.Expenses
 
   @doc """
   Retourne tous les porte-monnaies auxquels l'utilisateur participe
@@ -172,22 +175,38 @@ defmodule LesBonsComptes.Wallets do
 
   @doc """
   Met à jour un porte-monnaie avec vérification que l'utilisateur est bien le propriétaire.
+  Rejette avec `{:error, :wallet_closed}` si le porte-monnaie n'est plus en phase de déclaration ("open").
   """
   def update_wallet(%User{} = user, %Wallet{} = wallet, attrs) do
-    if owner?(wallet, user) do
-      update_wallet(wallet, attrs)
-    else
-      {:error, :unauthorized}
+    cond do
+      wallet.status != "open" ->
+        {:error, :wallet_closed}
+
+      not owner?(wallet, user) ->
+        {:error, :unauthorized}
+
+      true ->
+        update_wallet(wallet, attrs)
     end
   end
 
   @doc """
   Met à jour les attributs d'un porte-monnaie.
+  Rejette les modifications de contenu si le porte-monnaie n'est plus en phase de déclaration ("open").
   """
   def update_wallet(%Wallet{} = wallet, attrs) do
-    wallet
-    |> Wallet.changeset(attrs)
-    |> Repo.update()
+    has_content_updates =
+      Enum.any?(attrs, fn {k, _v} ->
+        to_string(k) in ["name", "description", "currency"]
+      end)
+
+    if has_content_updates and wallet.status != "open" do
+      {:error, :wallet_closed}
+    else
+      wallet
+      |> Wallet.changeset(attrs)
+      |> Repo.update()
+    end
   end
 
   @doc """
@@ -240,8 +259,10 @@ defmodule LesBonsComptes.Wallets do
 
   @doc """
   Clôture un porte-monnaie en passant son statut à "closed".
+  Supprime également toutes les invitations existantes pour ce porte-monnaie.
   """
   def close_wallet(%Wallet{} = wallet) do
+    Repo.delete_all(from i in WalletInvitation, where: i.wallet_id == ^wallet.id)
     update_wallet(wallet, %{status: "closed"})
   end
 

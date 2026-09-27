@@ -710,11 +710,16 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       # Le bouton n'est pas affiché tant que le porte-monnaie est ouvert (Étape 1)
       refute has_element?(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
 
-      # Une fois validé (Étape 2), le bouton de virement apparaît avec son intitulé professionnel
+      # Une fois validé (Étape 2), le créancier (Alice) ne voit pas le bouton
       {:ok, _} = Wallets.validate_wallet(owner, wallet)
       {:ok, view_stage2, _html} = live(conn, ~p"/wallets/#{wallet.id}")
-      assert has_element?(view_stage2, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
-      assert element(view_stage2, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}") |> render() =~
+      refute has_element?(view_stage2, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+
+      # Le débiteur (Bob) voit le bouton de règlement
+      bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
+      {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
+      assert has_element?(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+      assert element(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}") |> render() =~
                "Marquer comme réglé"
     end
 
@@ -822,29 +827,39 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#reopen-wallet-btn")
       refute has_element?(view, "#close-wallet-btn")
 
-      assert has_element?(view, btn_id)
-      assert element(view, btn_id) |> render() =~ "Marquer comme réglé"
+      # Alice (créancière) ne peut pas régler le virement
+      refute has_element?(view, btn_id)
 
-      # Clic sur "Marquer comme réglé"
-      view |> element(btn_id) |> render_click()
+      # Bob (débiteur) se connecte et voit le bouton
+      bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
+      {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
+      assert has_element?(bob_view, btn_id)
+      assert element(bob_view, btn_id) |> render() =~ "Marquer comme réglé"
 
-      # Notification flash de clôture automatique définitive
-      assert render(view) =~ "Dernier virement de 60.00 EUR de Bob vers Alice réglé !"
-      assert render(view) =~ "le porte-monnaie est désormais clôturé définitivement."
+      # Bob clique sur "Marquer comme réglé"
+      bob_view |> element(btn_id) |> render_click()
+
+      # Notification flash de clôture automatique définitive reçue par Bob
+      assert render(bob_view) =~ "Dernier virement de 60.00 EUR de Bob vers Alice réglé !"
+      assert render(bob_view) =~ "le porte-monnaie est désormais clôturé définitivement."
 
       # Le bouton a disparu et est remplacé par le badge "Réglé"
-      refute has_element?(view, btn_id)
-      assert has_element?(view, badge_id)
-      assert element(view, badge_id) |> render() =~ "Réglé"
-      refute element(view, badge_id) |> render() =~ "Simulation"
+      refute has_element?(bob_view, btn_id)
+      assert has_element?(bob_view, badge_id)
+      assert element(bob_view, badge_id) |> render() =~ "Réglé"
+      refute element(bob_view, badge_id) |> render() =~ "Simulation"
 
       # La répartition des remboursements est mise à jour (100% réglé)
+      assert element(bob_view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) réglé(s)"
+      assert element(bob_view, "#summary-settled-amount") |> render() =~ "60.00 EUR"
+      assert element(bob_view, "#summary-remaining-amount") |> render() =~ "0.00 EUR"
+      assert has_element?(bob_view, "#all-settlements-completed-message")
+      assert render(bob_view) =~ "Tous les remboursements ont été effectués avec succès !"
+      assert render(bob_view) =~ "Le porte-monnaie est désormais définitivement clôturé"
+
+      # Synchronisation PubSub en temps réel sur la vue d'Alice
+      assert has_element?(view, badge_id)
       assert element(view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) réglé(s)"
-      assert element(view, "#summary-settled-amount") |> render() =~ "60.00 EUR"
-      assert element(view, "#summary-remaining-amount") |> render() =~ "0.00 EUR"
-      assert has_element?(view, "#all-settlements-completed-message")
-      assert render(view) =~ "Tous les remboursements ont été effectués avec succès !"
-      assert render(view) =~ "Le porte-monnaie est désormais définitivement clôturé"
 
       # -----------------------------------------------------------------------
       # ÉTAPE 3 : Clôture automatique et stricte irréversibilité
@@ -896,17 +911,22 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       bob_btn = "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}"
       charlie_btn = "#mock-settle-btn-#{charlie_member.id}-#{alice_member.id}"
 
-      view |> element(bob_btn) |> render_click()
+      # Bob effectue son virement
+      bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
+      {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
+      bob_view |> element(bob_btn) |> render_click()
 
-      # Après un premier virement : le virement est définitif, la réouverture disparaît de l'UI
+      # Après un premier virement : le virement est définitif, la réouverture disparaît de l'UI pour Alice
       refute has_element?(view, "#reopen-wallet-btn")
 
       # Toute tentative d'envoi de l'événement de réouverture est refusée
       render_click(view, "reopen_wallet", %{})
       assert render(view) =~ "Impossible d&#39;annuler la validation : des virements ont déjà été effectués et sont définitifs."
 
-      # Le deuxième virement est effectué -> Clôture automatique !
-      view |> element(charlie_btn) |> render_click()
+      # Le deuxième virement est effectué par Charlie -> Clôture automatique !
+      charlie_conn = authenticate_user(Phoenix.ConnTest.build_conn(), charlie)
+      {:ok, charlie_view, _html} = live(charlie_conn, ~p"/wallets/#{wallet.id}")
+      charlie_view |> element(charlie_btn) |> render_click()
 
       assert has_element?(view, "#wallet-status-badge", "Clos")
       assert Wallets.get_wallet!(wallet.id).status == "closed"
