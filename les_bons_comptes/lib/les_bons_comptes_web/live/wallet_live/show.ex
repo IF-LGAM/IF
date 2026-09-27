@@ -145,6 +145,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
       total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
       expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
       creditors = Expenses.calculate_creditors(wallet)
+      debtors = Expenses.calculate_debtors(wallet)
       settlements = Expenses.calculate_settlements(wallet)
 
       {:ok,
@@ -153,6 +154,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
          total_expenses: total_expenses,
          expenses_by_member: expenses_by_member,
          creditors: creditors,
+         debtors: debtors,
          settlements: settlements
        }}
     rescue
@@ -391,6 +393,55 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               <div id="wallet-creditors-list" class="divide-y divide-base-200">
                 <%= for creditor <- @creditors do %>
                   <.creditor_item creditor={creditor} currency={@wallet.currency} />
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+        <%!-- Comptes qui doivent donner de l'argent (US : Liste des comptes qui doivent donner de l’argent et combien) --%>
+        <div id="wallet-debtors-section" class="card bg-base-100 shadow-xl border border-base-200">
+          <div class="card-body p-6 sm:p-8 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
+                  <.icon name="hero-arrow-up-right" class="size-5 text-warning" />
+                  <span>Comptes qui doivent donner de l'argent ({length(@debtors)})</span>
+                </h2>
+                <p class="text-xs text-base-content/60">
+                  Participants devant régler leur part des dépenses communes
+                </p>
+              </div>
+
+              <%= if @debtors != [] do %>
+                <span id="debtors-count-badge" class="badge badge-warning badge-sm font-semibold">
+                  {length(@debtors)} débiteur(s)
+                </span>
+              <% end %>
+            </div>
+
+            <%= if @debtors == [] do %>
+              <div
+                id="no-debtors-message"
+                class="text-center py-8 text-base-content/60 bg-base-200/30 rounded-xl border border-dashed border-base-300 space-y-2"
+              >
+                <.icon name="hero-check-badge" class="size-8 mx-auto text-success/60" />
+                <%= if @wallet.expenses == [] do %>
+                  <p class="font-medium text-sm">Aucun montant à régler</p>
+                  <p class="text-xs">
+                    Ajoutez des dépenses au groupe pour calculer automatiquement les soldes et les montants à payer.
+                  </p>
+                <% else %>
+                  <p class="font-medium text-sm">Les comptes sont équilibrés !</p>
+                  <p class="text-xs">
+                    Chaque participant a payé sa part exacte. Aucun remboursement n'est dû.
+                  </p>
+                <% end %>
+              </div>
+            <% else %>
+              <div id="wallet-debtors-list" class="divide-y divide-base-200">
+                <%= for debtor <- @debtors do %>
+                  <.debtor_item debtor={debtor} currency={@wallet.currency} />
                 <% end %>
               </div>
             <% end %>

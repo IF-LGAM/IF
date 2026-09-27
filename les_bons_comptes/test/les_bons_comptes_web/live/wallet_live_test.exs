@@ -810,4 +810,125 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#reset-mock-settlements-btn")
     end
   end
+
+  describe "Affichage des comptes qui doivent donner de l'argent et gestion des états vides (IF - Comptes débiteurs)" do
+    test "affiche la liste des comptes débiteurs et les montants exacts quand des dépenses existent",
+         %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_deb@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_deb@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Vacances Espagne", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      # Alice paie 100€, Bob paie 0€. Total = 100€, part = 50€ -> Bob doit régler 50€
+      {:ok, _expense} =
+        Expenses.create_expense(owner, wallet, %{
+          title: "Location voiture",
+          amount: "100.00"
+        })
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      # Vérification de la section des comptes débiteurs
+      assert has_element?(view, "#wallet-debtors-section")
+      assert has_element?(view, "#wallet-debtors-list")
+      assert has_element?(view, "#debtors-count-badge", "1 débiteur(s)")
+      refute has_element?(view, "#no-debtors-message")
+
+      # Bob doit être listé avec son montant net à payer
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      assert has_element?(view, "#debtor-item-#{bob_member.id}")
+      assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "Bob"
+      assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "- 50.00 EUR"
+      assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "A payé 0.00 EUR"
+      assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "Part due : 50.00 EUR"
+      assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "À régler"
+
+      # Alice est créditrice, elle ne doit pas être affichée dans les comptes débiteurs
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      refute has_element?(view, "#debtor-item-#{alice_member.id}")
+    end
+
+    test "affiche un état vide informatif quand aucune dépense n'est enregistrée", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_deb_empty@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_deb_empty@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Voyage Vide Débiteur", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#wallet-debtors-section")
+      assert has_element?(view, "#no-debtors-message")
+      assert has_element?(view, "#no-debtors-message", "Aucun montant à régler")
+      assert render(view) =~ "Ajoutez des dépenses au groupe"
+      refute has_element?(view, "#wallet-debtors-list")
+      refute has_element?(view, "#debtors-count-badge")
+    end
+
+    test "affiche un état vide équilibré quand chaque membre a payé sa part exacte", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_deb_eq@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_deb_eq@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Équilibre Débiteur", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      {:ok, _e1} =
+        Expenses.create_expense(owner, wallet, %{title: "Courses", amount: "50.00"})
+
+      {:ok, _e2} =
+        Expenses.create_expense(bob, wallet, %{title: "Carburant", amount: "50.00"})
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#wallet-debtors-section")
+      assert has_element?(view, "#no-debtors-message")
+      assert has_element?(view, "#no-debtors-message", "Les comptes sont équilibrés !")
+      assert render(view) =~ "Chaque participant a payé sa part exacte"
+      refute has_element?(view, "#wallet-debtors-list")
+    end
+
+    test "affiche plusieurs comptes débiteurs triés par montant à payer décroissant", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_multi_deb@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_multi_deb@test.com"})
+      charlie = create_user(%{name: "Charlie", email: "charlie_multi_deb@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Multi Débiteurs", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      # Alice paie 90€, Bob paie 30€, Charlie paie 0€. Total = 120€, part = 40€ chacun
+      # Charlie doit 40€, Bob doit 10€, Alice est créditrice de 50€
+      {:ok, _e1} =
+        Expenses.create_expense(owner, wallet, %{title: "Hébergement", amount: "90.00"})
+
+      {:ok, _e2} =
+        Expenses.create_expense(bob, wallet, %{title: "Repas", amount: "30.00"})
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#debtors-count-badge", "2 débiteur(s)")
+
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      charlie_member = Enum.find(wallet.members, &(&1.name == "Charlie"))
+
+      assert has_element?(view, "#debtor-item-#{charlie_member.id}")
+      assert element(view, "#debtor-item-#{charlie_member.id}") |> render() =~ "- 40.00 EUR"
+
+      assert has_element?(view, "#debtor-item-#{bob_member.id}")
+      assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "- 10.00 EUR"
+    end
+  end
 end
