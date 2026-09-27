@@ -86,7 +86,7 @@ defmodule LesBonsComptesWeb.SettlementController do
       {:error, :wallet_not_closed} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Le porte-monnaie doit être clos pour effectuer les remboursements"})
+        |> json(%{error: "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"})
 
       {:error, :member_not_found} ->
         conn
@@ -106,13 +106,15 @@ defmodule LesBonsComptesWeb.SettlementController do
       {:error, _reason} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Impossible d'effectuer le remboursement simulé"})
+        |> json(%{error: "Impossible d'effectuer le virement"})
     end
   end
 
   defp execute_mock_settlement(conn, wallet, _params) do
     case Expenses.mock_settle_all(wallet) do
       {:ok, settlements} ->
+        wallet = LesBonsComptes.Wallets.get_wallet!(wallet.id)
+
         conn
         |> put_status(:ok)
         |> render(:mock_all, settlements: settlements, wallet: wallet)
@@ -120,12 +122,12 @@ defmodule LesBonsComptesWeb.SettlementController do
       {:error, :wallet_not_closed} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Le porte-monnaie doit être clos pour effectuer les remboursements"})
+        |> json(%{error: "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"})
 
       {:error, _reason} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Impossible d'effectuer les remboursements simulés"})
+        |> json(%{error: "Impossible d'effectuer les virements"})
     end
   end
 

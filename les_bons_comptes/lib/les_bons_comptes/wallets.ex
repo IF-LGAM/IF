@@ -209,7 +209,26 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Clôture un porte-monnaie (IF-85). Seul le propriétaire peut clore le groupe.
+  Valide les comptes d'un porte-monnaie et fige les dépenses pour passer à l'attente des virements (Étape 2).
+  Seul le propriétaire peut valider le groupe.
+  """
+  def validate_wallet(%User{} = user, %Wallet{} = wallet) do
+    if owner?(wallet, user) do
+      validate_wallet(wallet)
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc """
+  Valide un porte-monnaie en passant son statut à "pending_settlement".
+  """
+  def validate_wallet(%Wallet{} = wallet) do
+    update_wallet(wallet, %{status: "pending_settlement"})
+  end
+
+  @doc """
+  Clôture un porte-monnaie (Étape 3 : Clôturé). Seul le propriétaire peut clore le groupe.
   """
   def close_wallet(%User{} = user, %Wallet{} = wallet) do
     if owner?(wallet, user) do
@@ -227,21 +246,33 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Rouvre un porte-monnaie clos (IF-85). Seul le propriétaire peut rouvrir le groupe.
+  Rouvre un porte-monnaie validé pour modifications (Étape 1 : Déclarations).
+  Seul le propriétaire peut rouvrir le groupe.
+  La clôture étant définitive, un porte-monnaie clos ne peut jamais être rouvert ({:error, :closure_is_final}).
   """
   def reopen_wallet(%User{} = user, %Wallet{} = wallet) do
-    if owner?(wallet, user) do
-      reopen_wallet(wallet)
-    else
-      {:error, :unauthorized}
+    cond do
+      not owner?(wallet, user) ->
+        {:error, :unauthorized}
+
+      wallet.status == "closed" ->
+        {:error, :closure_is_final}
+
+      true ->
+        reopen_wallet(wallet)
     end
   end
 
   @doc """
   Rouvre un porte-monnaie en repassant son statut à "open".
+  Échoue si le porte-monnaie est déjà clos.
   """
   def reopen_wallet(%Wallet{} = wallet) do
-    update_wallet(wallet, %{status: "open"})
+    if wallet.status == "closed" do
+      {:error, :closure_is_final}
+    else
+      update_wallet(wallet, %{status: "open"})
+    end
   end
 
   @doc """
@@ -251,9 +282,33 @@ defmodule LesBonsComptes.Wallets do
   def closed?(_), do: false
 
   @doc """
-  Indique si le porte-monnaie est ouvert.
+  Indique si le porte-monnaie est en attente de virements.
+  """
+  def pending_settlement?(%Wallet{} = wallet), do: Wallet.pending_settlement?(wallet)
+  def pending_settlement?(_), do: false
+
+  @doc """
+  Indique si le porte-monnaie est ouvert aux déclarations.
   """
   def open?(%Wallet{} = wallet), do: Wallet.open?(wallet)
   def open?(_), do: false
+
+  @doc """
+  Retourne le numéro d'étape actuel (1, 2 ou 3).
+  """
+  def step_number(%Wallet{} = wallet), do: Wallet.step_number(wallet)
+  def step_number(_), do: 1
+
+  @doc """
+  Retourne le libellé de l'étape actuelle.
+  """
+  def status_label(%Wallet{} = wallet), do: Wallet.status_label(wallet)
+  def status_label(_), do: "Déclarations en cours"
+
+  @doc """
+  Indique si le porte-monnaie peut être rouvert.
+  """
+  def reopenable?(%Wallet{} = wallet), do: Wallet.reopenable?(wallet)
+  def reopenable?(_), do: false
 end
 

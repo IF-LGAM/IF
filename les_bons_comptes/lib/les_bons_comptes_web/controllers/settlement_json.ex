@@ -28,22 +28,23 @@ defmodule LesBonsComptesWeb.SettlementJSON do
   end
 
   @doc """
-  Rend la confirmation d'un remboursement simulé (mock) (IF-85).
+  Rend la confirmation d'un virement effectué (IF-85).
   """
   def mock(%{settlement: settlement}) do
     %{
       status: "success",
-      message: "Remboursement simulé avec succès",
+      message: "Virement enregistré avec succès",
       settlement: data_mock_settlement(settlement)
     }
   end
 
   @doc """
-  Rend la liste de tous les remboursements simulés pour un porte-monnaie (IF-85).
+  Rend la liste de tous les virements effectués pour un porte-monnaie (IF-85).
   """
   def mock_all(%{settlements: settlements, wallet: wallet}) do
     %{
       status: "success",
+      message: "Tous les virements ont été effectués avec succès",
       wallet_id: wallet.id,
       wallet_name: wallet.name,
       currency: wallet.currency,
@@ -65,7 +66,8 @@ defmodule LesBonsComptesWeb.SettlementJSON do
       amount: format_decimal(s.amount),
       currency: s.currency,
       status: s.status,
-      simulated: s.simulated,
+      settled: s[:settled] || true,
+      simulated: s[:simulated] || true,
       settled_at: DateTime.to_iso8601(s.settled_at)
     }
   end

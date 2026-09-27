@@ -30,21 +30,73 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche le badge du statut du porte-monnaie (Ouvert ou Clos) (IF-85).
+  Affiche le badge du statut du porte-monnaie selon l'étape (IF-85).
+  - open : Étape 1 : Ouvert (Déclarations en cours)
+  - pending_settlement : Étape 2 : Attente des virements
+  - closed : Étape 3 : Clos
   """
   attr :status, :string, default: "open"
 
   def wallet_status_badge(assigns) do
     ~H"""
-    <%= if @status == "closed" do %>
-      <span id="wallet-status-badge" class="badge badge-neutral font-bold gap-1 shadow-sm">
-        <.icon name="hero-lock-closed" class="size-3" /> Clos
-      </span>
-    <% else %>
-      <span id="wallet-status-badge" class="badge badge-success font-bold gap-1 shadow-sm">
-        <.icon name="hero-lock-open" class="size-3" /> Ouvert
-      </span>
+    <%= case @status do %>
+      <% "closed" -> %>
+        <span id="wallet-status-badge" class="badge badge-neutral font-bold gap-1 shadow-sm">
+          <.icon name="hero-check-badge" class="size-3" /> Clos
+        </span>
+      <% "pending_settlement" -> %>
+        <span id="wallet-status-badge" class="badge badge-warning font-bold gap-1 shadow-sm">
+          <.icon name="hero-clock" class="size-3" /> Attente des virements
+        </span>
+      <% _ -> %>
+        <span id="wallet-status-badge" class="badge badge-success font-bold gap-1 shadow-sm">
+          <.icon name="hero-lock-open" class="size-3" /> Ouvert
+        </span>
     <% end %>
+    """
+  end
+
+  @doc """
+  Affiche le stepper horizontal visuel des 3 étapes du porte-monnaie (IF-85).
+  Étape 1 : Déclarations & Invitations
+  Étape 2 : Attente des virements
+  Étape 3 : Clôture
+  """
+  attr :status, :string, default: "open"
+
+  def wallet_lifecycle_stepper(assigns) do
+    step =
+      case assigns.status do
+        "closed" -> 3
+        "pending_settlement" -> 2
+        _ -> 1
+      end
+
+    assigns = assign(assigns, :step, step)
+
+    ~H"""
+    <div id="wallet-lifecycle-stepper" class="w-full bg-base-100 rounded-2xl p-4 border border-base-200 shadow-sm">
+      <ul class="steps steps-horizontal w-full text-xs">
+        <li class={[
+          "step",
+          @step >= 1 && "step-primary font-semibold"
+        ]} data-content={if(@step > 1, do: "✓", else: "1")}>
+          <span class="text-xs">1. Déclarations</span>
+        </li>
+        <li class={[
+          "step",
+          @step >= 2 && "step-primary font-semibold"
+        ]} data-content={if(@step > 2, do: "✓", else: "2")}>
+          <span class="text-xs">2. Attente des virements</span>
+        </li>
+        <li class={[
+          "step",
+          @step >= 3 && "step-success font-semibold"
+        ]} data-content={if(@step >= 3, do: "✓", else: "3")}>
+          <span class="text-xs">3. Clôture</span>
+        </li>
+      </ul>
+    </div>
     """
   end
 
@@ -382,16 +434,20 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Composant d'affichage d'un virement proposé entre comptes (IF-84).
+  Composant d'affichage d'un virement proposé entre comptes (IF-84, IF-85).
   Affiche le compte émetteur (débiteur), le flux vers le compte récepteur (créditeur),
-  le montant net optimisé à transférer, et le bouton/badge de simulation de remboursement (mock).
+  le montant net optimisé à transférer, et le bouton/badge de règlement.
   """
   attr :settlement, :map, required: true
   attr :currency, :string, default: "EUR"
   attr :is_mock_settled, :boolean, default: false
+  attr :status, :string, default: "open"
   attr :is_closed, :boolean, default: false
 
   def settlement_item(assigns) do
+    can_settle = assigns.is_closed or assigns.status in ["pending_settlement", "closed"]
+    assigns = assign(assigns, :can_settle, can_settle)
+
     ~H"""
     <div
       id={"settlement-item-#{@settlement.from_id}-#{@settlement.to_id}"}
@@ -441,27 +497,26 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
             class="badge badge-success badge-sm gap-1 py-3 px-2.5 font-semibold shadow-sm"
           >
             <.icon name="hero-check-circle" class="size-4" />
-            <span>Réglé (Simulation)</span>
+            <span>Réglé</span>
           </div>
         <% else %>
-          <button
-            type="button"
-            id={"mock-settle-btn-#{@settlement.from_id}-#{@settlement.to_id}"}
-            phx-click="mock_settle"
-            phx-value-from_id={@settlement.from_id}
-            phx-value-to_id={@settlement.to_id}
-            phx-value-from_name={@settlement.from_name}
-            phx-value-to_name={@settlement.to_name}
-            phx-value-amount={format_amount(@settlement.amount)}
-            class={[
-              "btn btn-xs gap-1 hover:shadow-sm",
-              if(@is_closed, do: "btn-outline btn-success", else: "btn-outline btn-warning")
-            ]}
-            title={if(@is_closed, do: "Simuler ce remboursement", else: "Attention : le porte-monnaie doit être clos")}
-          >
-            <.icon name="hero-check" class="size-3.5" />
-            <span>Simuler le virement</span>
-          </button>
+          <%= if @can_settle do %>
+            <button
+              type="button"
+              id={"mock-settle-btn-#{@settlement.from_id}-#{@settlement.to_id}"}
+              phx-click="mock_settle"
+              phx-value-from_id={@settlement.from_id}
+              phx-value-to_id={@settlement.to_id}
+              phx-value-from_name={@settlement.from_name}
+              phx-value-to_name={@settlement.to_name}
+              phx-value-amount={format_amount(@settlement.amount)}
+              class="btn btn-xs btn-outline btn-success gap-1 hover:shadow-sm"
+              title="Marquer ce virement comme réglé"
+            >
+              <.icon name="hero-check" class="size-3.5" />
+              <span>Marquer comme réglé</span>
+            </button>
+          <% end %>
         <% end %>
       </div>
     </div>
@@ -469,7 +524,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche le récapitulatif des remboursements simulés et leur répartition entre comptes (IF-85).
+  Affiche le récapitulatif des remboursements et leur répartition entre comptes (IF-85).
   """
   attr :settlements, :list, default: []
   attr :mock_settled_ids, :any, default: MapSet.new()
@@ -514,21 +569,21 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
       |> assign(:all_completed, all_completed)
 
     ~H"""
-    <div id="simulated-settlements-summary" class="bg-base-200/50 rounded-xl p-4 border border-base-200 space-y-3">
+    <div id="settlements-summary" class="bg-base-200/50 rounded-xl p-4 border border-base-200 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div class="space-y-0.5">
           <div class="text-xs font-semibold text-base-content/70 uppercase tracking-wider flex items-center gap-1.5">
             <.icon name="hero-chart-pie" class="size-4 text-primary" />
-            <span>Répartition des remboursements simulés</span>
+            <span>Répartition des remboursements</span>
           </div>
           <p class="text-xs text-base-content/60">
-            Progression des virements simulés et réconciliation des montants
+            Progression des virements et réconciliation des montants
           </p>
         </div>
 
         <div class="flex items-center gap-2">
           <span id="settlement-progress-badge" class="badge badge-primary badge-sm font-semibold">
-            {@settled_count} / {@total_count} virement(s) simulé(s)
+            {@settled_count} / {@total_count} virement(s) réglé(s)
           </span>
         </div>
       </div>
@@ -553,14 +608,14 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
         </div>
 
         <div class="bg-base-100 p-2 rounded-lg border border-base-200">
-          <span class="text-success block">Simulé / Réglé</span>
+          <span class="text-success block">Réglé</span>
           <strong id="summary-settled-amount" class="text-success font-bold text-sm">
             {format_amount(@settled_amount)} {@currency}
           </strong>
         </div>
 
         <div class="bg-base-100 p-2 rounded-lg border border-base-200 col-span-2 sm:col-span-1">
-          <span class="text-base-content/60 block">Restant à simuler</span>
+          <span class="text-base-content/60 block">Restant à régler</span>
           <strong id="summary-remaining-amount" class="text-warning font-bold text-sm">
             {format_amount(@remaining_amount)} {@currency}
           </strong>
@@ -573,7 +628,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
           class="p-3 bg-success/15 border border-success/30 rounded-lg text-success text-xs font-medium flex items-center gap-2"
         >
           <.icon name="hero-check-circle" class="size-5 shrink-0" />
-          <span>Tous les remboursements ont été simulés avec succès ! L'ensemble des comptes est désormais soldé.</span>
+          <span>Tous les remboursements ont été effectués avec succès ! Le porte-monnaie est désormais définitivement clôturé et l'ensemble des comptes est soldé.</span>
         </div>
       <% end %>
     </div>

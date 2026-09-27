@@ -51,7 +51,7 @@ defmodule LesBonsComptes.Expenses do
     user_member = Enum.find(wallet.members, &(&1.user_id == user.id))
 
     cond do
-      wallet.status == "closed" ->
+      wallet.status in ["pending_settlement", "closed"] ->
         {:error, :wallet_closed}
 
       is_nil(user_member) ->
@@ -609,10 +609,10 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Exécute une action de remboursement simulé (mock) entre deux membres pour un montant donné (IF-85).
+  Exécute une action de règlement de virement entre deux membres pour un montant donné (IF-85).
   Règles métier :
   - Le porte-monnaie doit exister.
-  - Le porte-monnaie doit être clos (status == "closed"). Si ce n'est pas le cas, retourne `{:error, :wallet_not_closed}`.
+  - Le porte-monnaie doit être validé ou clos (status in ["pending_settlement", "closed"]). S'il est ouvert, retourne `{:error, :wallet_not_closed}`.
   - Les membres émetteur et récepteur doivent appartenir au porte-monnaie et être distincts.
   - Le montant doit être supérieur à zéro.
   """
@@ -621,7 +621,7 @@ defmodule LesBonsComptes.Expenses do
       nil ->
         {:error, :not_found}
 
-      %Wallet{status: status} when status != "closed" ->
+      %Wallet{status: "open"} ->
         {:error, :wallet_not_closed}
 
       %Wallet{} = wallet ->
@@ -630,7 +630,7 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Simule l'ensemble des remboursements proposés pour un porte-monnaie clos.
+  Enregistre le règlement de l'ensemble des remboursements proposés pour un porte-monnaie validé ou clos.
   Retourne `{:ok, settlements}` ou `{:error, reason}`.
   """
   def mock_settle_all(wallet_or_id) do
@@ -638,11 +638,14 @@ defmodule LesBonsComptes.Expenses do
       nil ->
         {:error, :not_found}
 
-      %Wallet{status: status} when status != "closed" ->
+      %Wallet{status: "open"} ->
         {:error, :wallet_not_closed}
 
       %Wallet{} = wallet ->
         settlements = calculate_settlements(wallet)
+
+        # Clôture automatique du porte-monnaie lorsque tous les virements sont réalisés
+        {:ok, _closed_wallet} = LesBonsComptes.Wallets.close_wallet(wallet)
 
         simulated =
           Enum.map(settlements, fn s ->
@@ -658,6 +661,7 @@ defmodule LesBonsComptes.Expenses do
               amount: s.amount,
               currency: s.currency,
               status: "settled",
+              settled: true,
               simulated: true,
               settled_at: DateTime.utc_now()
             }
@@ -709,6 +713,7 @@ defmodule LesBonsComptes.Expenses do
         amount: dec_amount,
         currency: wallet.currency,
         status: "settled",
+        settled: true,
         simulated: true,
         settled_at: DateTime.utc_now()
       }

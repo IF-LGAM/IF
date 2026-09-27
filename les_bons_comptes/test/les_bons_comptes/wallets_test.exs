@@ -398,17 +398,43 @@ defmodule LesBonsComptes.WalletsTest do
     end
   end
 
-  describe "Statut et clôture du porte-monnaie (IF-85)" do
-    test "un nouveau porte-monnaie a le statut 'open' par défaut" do
+  describe "Statut, cycle de vie en 3 étapes et clôture du porte-monnaie (IF-85)" do
+    test "un nouveau porte-monnaie a le statut 'open' par défaut (Étape 1 : Déclarations)" do
       owner = create_user()
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Porte-monnaie Ouvert"})
 
       assert wallet.status == "open"
       assert Wallets.open?(wallet)
+      refute Wallets.pending_settlement?(wallet)
       refute Wallets.closed?(wallet)
+      assert Wallets.step_number(wallet) == 1
+      assert Wallets.status_label(wallet) == "Déclarations en cours"
     end
 
-    test "close_wallet/2 permet au propriétaire de clôturer le porte-monnaie" do
+    test "validate_wallet/2 permet au propriétaire de passer à l'attente des virements (Étape 2)" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "À Valider"})
+
+      assert {:ok, validated_wallet} = Wallets.validate_wallet(owner, wallet)
+      assert validated_wallet.status == "pending_settlement"
+      assert Wallets.pending_settlement?(validated_wallet)
+      refute Wallets.open?(validated_wallet)
+      refute Wallets.closed?(validated_wallet)
+      assert Wallets.step_number(validated_wallet) == 2
+      assert Wallets.status_label(validated_wallet) == "Attente des virements"
+    end
+
+    test "validate_wallet/2 rejette la validation par un non-propriétaire" do
+      owner = create_user()
+      stranger = create_user(%{email: "stranger_val@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Protégé"})
+
+      assert Wallets.validate_wallet(stranger, wallet) == {:error, :unauthorized}
+      reloaded = Wallets.get_wallet!(wallet.id)
+      assert reloaded.status == "open"
+    end
+
+    test "close_wallet/2 permet au propriétaire de clôturer le porte-monnaie (Étape 3 : Clôturé)" do
       owner = create_user()
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "À Clôturer"})
 
@@ -416,6 +442,9 @@ defmodule LesBonsComptes.WalletsTest do
       assert closed_wallet.status == "closed"
       assert Wallets.closed?(closed_wallet)
       refute Wallets.open?(closed_wallet)
+      refute Wallets.pending_settlement?(closed_wallet)
+      assert Wallets.step_number(closed_wallet) == 3
+      assert Wallets.status_label(closed_wallet) == "Clôturé"
     end
 
     test "close_wallet/2 rejette la clôture par un non-propriétaire" do
@@ -428,30 +457,45 @@ defmodule LesBonsComptes.WalletsTest do
       assert reloaded.status == "open"
     end
 
-    test "reopen_wallet/2 permet au propriétaire de rouvrir un porte-monnaie clos" do
+    test "reopen_wallet/2 permet de rouvrir un porte-monnaie validé (Étape 2 -> Étape 1)" do
       owner = create_user()
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "À Rouvrir"})
+      {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
+      assert pending_wallet.status == "pending_settlement"
+      assert Wallets.reopenable?(pending_wallet)
+
+      assert {:ok, back_to_open} = Wallets.reopen_wallet(owner, pending_wallet)
+      assert back_to_open.status == "open"
+      assert Wallets.open?(back_to_open)
+      assert Wallets.step_number(back_to_open) == 1
+    end
+
+    test "reopen_wallet/2 refuse catégoriquement de rouvrir un porte-monnaie clos (la clôture est définitive)" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Clos Définitif"})
       {:ok, closed_wallet} = Wallets.close_wallet(owner, wallet)
       assert closed_wallet.status == "closed"
+      refute Wallets.reopenable?(closed_wallet)
 
-      assert {:ok, reopened_wallet} = Wallets.reopen_wallet(owner, closed_wallet)
-      assert reopened_wallet.status == "open"
-      assert Wallets.open?(reopened_wallet)
+      assert Wallets.reopen_wallet(owner, closed_wallet) == {:error, :closure_is_final}
     end
 
     test "reopen_wallet/2 rejette la réouverture par un non-propriétaire" do
       owner = create_user()
       stranger = create_user(%{email: "stranger2@test.com"})
-      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Clos"})
-      {:ok, closed_wallet} = Wallets.close_wallet(owner, wallet)
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "En attente"})
+      {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
 
-      assert Wallets.reopen_wallet(stranger, closed_wallet) == {:error, :unauthorized}
+      assert Wallets.reopen_wallet(stranger, pending_wallet) == {:error, :unauthorized}
     end
 
-    test "validation du statut dans le changeset" do
+    test "validation du statut dans le changeset pour les 3 étapes" do
       wallet = %Wallet{}
-      valid_changeset = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "closed"})
-      assert valid_changeset.valid?
+
+      for status <- ~w(open pending_settlement closed) do
+        cs = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: status})
+        assert cs.valid?, "Le statut #{status} devrait être valide"
+      end
 
       invalid_changeset = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "invalid_status"})
       refute invalid_changeset.valid?

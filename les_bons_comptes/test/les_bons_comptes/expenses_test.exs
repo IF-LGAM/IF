@@ -709,13 +709,21 @@ defmodule LesBonsComptes.ExpensesTest do
   end
 
   describe "mock_settle_transfer/4 et mock_settle_all/1 (Action de remboursement mock pour un porte-monnaie clos - IF-85)" do
-    test "create_expense/3 est rejeté si le porte-monnaie est clos" do
+    test "create_expense/3 est rejeté si le porte-monnaie est validé ou clos" do
       %{creator: creator, wallet: wallet} = setup_wallet_with_members()
-      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+
+      assert {:error, :wallet_closed} =
+               Expenses.create_expense(creator, pending_wallet, %{
+                 title: "Dépense interdite en attente de virement",
+                 amount: "20.00"
+               })
+
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
 
       assert {:error, :wallet_closed} =
                Expenses.create_expense(creator, closed_wallet, %{
-                 title: "Dépense interdite",
+                 title: "Dépense interdite quand clos",
                  amount: "20.00"
                })
     end
@@ -738,18 +746,28 @@ defmodule LesBonsComptes.ExpensesTest do
                })
     end
 
-    test "mock_settle_transfer réussit si le porte-monnaie est clos" do
+    test "mock_settle_transfer réussit si le porte-monnaie est validé (Étape 2) ou clos (Étape 3)" do
       %{creator: creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
 
-      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+      # Étape 2 : validé
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
+
+      assert {:ok, pending_res} =
+               Expenses.mock_settle_transfer(pending_wallet, bob_member.id, alice_member.id, "40.00")
+
+      assert pending_res.status == "settled"
+      assert pending_res.settled == true
+
+      # Étape 3 : clos
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
 
       assert {:ok, mock_res} =
                Expenses.mock_settle_transfer(closed_wallet, bob_member.id, alice_member.id, "40.00")
 
       assert mock_res.status == "settled"
-      assert mock_res.simulated == true
+      assert mock_res.settled == true
       assert mock_res.from_id == bob_member.id
       assert mock_res.from_name == "Bob"
       assert mock_res.to_id == alice_member.id
@@ -789,7 +807,7 @@ defmodule LesBonsComptes.ExpensesTest do
                Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "0.00")
     end
 
-    test "mock_settle_all/1 simule tous les virements proposés pour un porte-monnaie clos" do
+    test "mock_settle_all/1 simule tous les virements et clôture automatiquement le porte-monnaie" do
       creator = create_user(%{name: "Alice"})
       bob = create_user(%{name: "Bob"})
       charlie = create_user(%{name: "Charlie"})
@@ -805,11 +823,11 @@ defmodule LesBonsComptes.ExpensesTest do
       # Rejeté si ouvert
       assert {:error, :wallet_not_closed} = Expenses.mock_settle_all(wallet)
 
-      # Clôture du porte-monnaie
-      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+      # Validation du porte-monnaie (Étape 2)
+      {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
 
-      # Succès une fois clos
-      assert {:ok, simulated_list} = Expenses.mock_settle_all(closed_wallet)
+      # Succès : tous les virements sont réglés et le porte-monnaie est automatiquement clôturé
+      assert {:ok, simulated_list} = Expenses.mock_settle_all(pending_wallet)
       assert length(simulated_list) == 2
 
       Enum.each(simulated_list, fn s ->
@@ -818,6 +836,11 @@ defmodule LesBonsComptes.ExpensesTest do
         assert s.to_name == "Alice"
         assert Decimal.equal?(s.amount, Decimal.new("30.00"))
       end)
+
+      # Vérification de la clôture automatique en base
+      reloaded_wallet = Wallets.get_wallet!(wallet.id)
+      assert reloaded_wallet.status == "closed"
+      assert Wallets.closed?(reloaded_wallet)
     end
   end
 end

@@ -151,10 +151,10 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
 
       conn = post(conn, ~p"/api/wallets/#{wallet.id}/settlements/mock", params)
       assert response = json_response(conn, 422)
-      assert response["error"] == "Le porte-monnaie doit être clos pour effectuer les remboursements"
+      assert response["error"] == "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"
     end
 
-    test "retourne 200 et les détails du virement simulé si le porte-monnaie est clos", %{
+    test "retourne 200 si le porte-monnaie est validé (Étape 2) ou clos (Étape 3)", %{
       conn: conn
     } do
       owner = create_user(%{name: "Alice", email: "alice_mock_closed@test.com"})
@@ -167,8 +167,8 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
 
       {:ok, _} = Expenses.create_expense(owner, wallet, %{title: "Courses", amount: "60.00"})
 
-      # Clôture du porte-monnaie
-      {:ok, _} = Wallets.close_wallet(owner, wallet)
+      # Validation du porte-monnaie (Étape 2)
+      {:ok, _} = Wallets.validate_wallet(owner, wallet)
 
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
@@ -183,7 +183,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
       assert response = json_response(conn, 200)
 
       assert response["status"] == "success"
-      assert response["message"] == "Remboursement simulé avec succès"
+      assert response["message"] == "Virement enregistré avec succès"
       assert s = response["settlement"]
       assert s["from_id"] == bob_member.id
       assert s["from_name"] == "Bob"
@@ -192,11 +192,11 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
       assert s["amount"] == "30.00"
       assert s["currency"] == "EUR"
       assert s["status"] == "settled"
-      assert s["simulated"] == true
+      assert s["settled"] == true
       assert s["settled_at"] != nil
     end
 
-    test "simule tous les remboursements lorsque aucun paramètre de virement spécifique n'est passé",
+    test "simule tous les remboursements lorsque aucun paramètre de virement spécifique n'est passé et clôture le porte-monnaie",
          %{conn: conn} do
       owner = create_user(%{name: "Alice", email: "alice_mock_all@test.com"})
       bob = create_user(%{name: "Bob", email: "bob_mock_all@test.com"})
@@ -207,9 +207,9 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
         ])
 
       {:ok, _} = Expenses.create_expense(owner, wallet, %{title: "Repas", amount: "80.00"})
-      {:ok, _} = Wallets.close_wallet(owner, wallet)
+      {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
 
-      conn = post(conn, ~p"/api/wallets/#{wallet.id}/settlements/mock", %{})
+      conn = post(conn, ~p"/api/wallets/#{pending_wallet.id}/settlements/mock", %{})
       assert response = json_response(conn, 200)
 
       assert response["status"] == "success"
@@ -218,6 +218,9 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
       assert settlement["from_name"] == "Bob"
       assert settlement["to_name"] == "Alice"
       assert settlement["amount"] == "40.00"
+
+      # Vérification de la clôture automatique
+      assert Wallets.get_wallet!(wallet.id).status == "closed"
     end
 
     test "retourne 404 si le porte-monnaie n'existe pas", %{conn: conn} do
