@@ -3,6 +3,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
   import Phoenix.LiveViewTest
 
   alias LesBonsComptes.Accounts
+  alias LesBonsComptes.Expenses
   alias LesBonsComptes.Wallets
 
   defp create_user(attrs \\ %{}) do
@@ -565,6 +566,104 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#notifications-dropdown-menu")
       assert render(view) =~ "Anniversaire"
       assert render(view) =~ "Amis Groupe"
+    end
+  end
+
+  describe "Affichage des comptes à rembourser et gestion des états vides (IF - Comptes créditeurs)" do
+    test "affiche la liste des comptes à rembourser et les montants exacts quand des dépenses existent",
+         %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_cred@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_cred@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Vacances Ski", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      # Alice paie 100€, Bob paie 0€. Total = 100€, part = 50€ -> Alice doit recevoir 50€
+      {:ok, _expense} =
+        Expenses.create_expense(owner, wallet, %{
+          title: "Forfaits ski",
+          amount: "100.00"
+        })
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      # Vérification de la section des remboursements
+      assert has_element?(view, "#wallet-creditors-section")
+      assert has_element?(view, "#wallet-creditors-list")
+      assert has_element?(view, "#creditors-count-badge", "1 bénéficiaire(s)")
+      refute has_element?(view, "#no-creditors-message")
+
+      # Alice doit être listée avec son montant net à recevoir
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      assert has_element?(view, "#creditor-item-#{alice_member.id}")
+      assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "Alice"
+      assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "+ 50.00 EUR"
+      assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "A payé 100.00 EUR"
+      assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "Part due : 50.00 EUR"
+
+      # Bob est débiteur, il ne doit pas être affiché dans les comptes à rembourser
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      refute has_element?(view, "#creditor-item-#{bob_member.id}")
+    end
+
+    test "affiche un état vide informatif quand aucune dépense n'est enregistrée", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_empty@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_empty@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Voyage Vide", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#wallet-creditors-section")
+      assert has_element?(view, "#no-creditors-message")
+      assert has_element?(view, "#no-creditors-message", "Aucun remboursement en attente")
+      assert render(view) =~ "Ajoutez des dépenses au groupe"
+      refute has_element?(view, "#wallet-creditors-list")
+    end
+
+    test "affiche un état vide équilibré quand chaque membre a payé sa part exacte", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_eq@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_eq@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Dépenses Égales", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      {:ok, _e1} =
+        Expenses.create_expense(owner, wallet, %{title: "Repas 1", amount: "40.00"})
+
+      {:ok, _e2} =
+        Expenses.create_expense(bob, wallet, %{title: "Repas 2", amount: "40.00"})
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#wallet-creditors-section")
+      assert has_element?(view, "#no-creditors-message")
+      assert has_element?(view, "#no-creditors-message", "Les comptes sont équilibrés !")
+      assert render(view) =~ "Chaque participant a payé exactement sa part"
+      refute has_element?(view, "#wallet-creditors-list")
+    end
+
+    test "redirige vers /wallets avec un message d'erreur si le porte-monnaie est introuvable", %{
+      conn: conn
+    } do
+      user = create_user()
+      conn = authenticate_user(conn, user)
+
+      # Identifiant inexistant
+      assert {:error, {:live_redirect, %{to: "/wallets", flash: %{"error" => msg}}}} =
+               live(conn, ~p"/wallets/999999")
+
+      assert msg =~ "n'existe pas ou est introuvable"
     end
   end
 end
