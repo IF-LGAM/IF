@@ -43,10 +43,12 @@ defmodule LesBonsComptesWeb.Router do
     end
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", LesBonsComptesWeb do
-  #   pipe_through :api
-  # end
+  # API REST pour les remboursements et soldes
+  scope "/api", LesBonsComptesWeb do
+    pipe_through :api
+
+    get "/wallets/:id/settlements", SettlementController, :index
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:les_bons_comptes, :dev_routes) do

@@ -540,4 +540,171 @@ defmodule LesBonsComptes.ExpensesTest do
       assert balances_from_data == balances_from_wallet
     end
   end
+
+  describe "calculate_debtors/1 (Calcul des comptes débiteurs et des montants à régler)" do
+    test "calcule fidèlement les montants à régler pour chaque participant débiteur" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Voyage", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      # Alice paie 90€, Bob paie 0€, Charlie paie 0€
+      # Total = 90€, part = 30€ chacun
+      # Bob doit régler 30€, Charlie doit régler 30€, Alice est créditrice (60€)
+      {:ok, _exp} =
+        Expenses.create_expense(creator, wallet, %{title: "Hébergement", amount: "90.00"})
+
+      debtors = Expenses.calculate_debtors(wallet)
+      assert length(debtors) == 2
+
+      bob_debtor = Enum.find(debtors, &(&1.name == "Bob"))
+      charlie_debtor = Enum.find(debtors, &(&1.name == "Charlie"))
+
+      assert bob_debtor != nil
+      assert charlie_debtor != nil
+      assert Decimal.equal?(bob_debtor.amount_to_pay, Decimal.new("30.00"))
+      assert Decimal.equal?(bob_debtor.amount, Decimal.new("30.00"))
+      assert bob_debtor.type == :debtor
+
+      # Alice ne figure pas dans les débiteurs
+      refute Enum.any?(debtors, &(&1.name == "Alice"))
+    end
+
+    test "trie les débiteurs par montant à régler décroissant" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Groupe", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      # Total 120€, part = 40€
+      # Alice paie 100€ (balance = +60€)
+      # Bob paie 20€ (balance = -20€)
+      # Charlie paie 0€ (balance = -40€)
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 1", amount: "100.00"})
+      {:ok, _} = Expenses.create_expense(bob, wallet, %{title: "Dépense 2", amount: "20.00"})
+
+      [first_debtor, second_debtor] = Expenses.calculate_debtors(wallet)
+      assert first_debtor.name == "Charlie"
+      assert Decimal.equal?(first_debtor.amount_to_pay, Decimal.new("40.00"))
+      assert second_debtor.name == "Bob"
+      assert Decimal.equal?(second_debtor.amount_to_pay, Decimal.new("20.00"))
+    end
+
+    test "retourne une liste vide si tous les comptes sont équilibrés ou sans dépenses" do
+      %{wallet: wallet} = setup_wallet_with_members()
+      assert Expenses.calculate_debtors(wallet) == []
+
+      assert Expenses.calculate_debtors(999_999) == []
+      assert Expenses.calculate_debtors(nil) == []
+    end
+
+    test "délégations Wallets pour les débiteurs" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Test", amount: "50.00"})
+
+      by_exp = Expenses.calculate_debtors(wallet)
+      by_wallets = Wallets.calculate_debtors(wallet)
+      by_alias = Wallets.calculate_debtor_accounts(wallet.id)
+      by_list = Wallets.list_debtors(wallet.id)
+
+      assert length(by_exp) == 1
+      assert by_exp == by_wallets
+      assert by_exp == by_alias
+      assert by_exp == by_list
+    end
+  end
+
+  describe "calculate_settlements/1 (Optimisation des virements pour minimiser les transactions)" do
+    test "cas simple 2 personnes : 1 dépense engendre exactement 1 virement direct" do
+      %{creator: creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
+
+      # Alice paie 80€ pour Alice et Bob -> Bob doit virer 40€ à Alice
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "80.00"})
+
+      settlements = Expenses.calculate_settlements(wallet)
+      assert length(settlements) == 1
+
+      [transfer] = settlements
+      assert transfer.from_name == "Bob"
+      assert transfer.to_name == "Alice"
+      assert Decimal.equal?(transfer.amount, Decimal.new("40.00"))
+      assert transfer.currency == "EUR"
+    end
+
+    test "cas 3 personnes avec 1 seul payeur : 2 virements directs vers le créancier" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Trio", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      # Alice paie 90€ -> part 30€ chacun
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Location", amount: "90.00"})
+
+      settlements = Expenses.calculate_settlements(wallet)
+      assert length(settlements) == 2
+
+      total_received_by_alice =
+        settlements
+        |> Enum.filter(&(&1.to_name == "Alice"))
+        |> Enum.reduce(Decimal.new("0.00"), &Decimal.add(&2, &1.amount))
+
+      assert Decimal.equal?(total_received_by_alice, Decimal.new("60.00"))
+
+      payers = Enum.map(settlements, & &1.from_name) |> Enum.sort()
+      assert payers == ["Bob", "Charlie"]
+    end
+
+    test "optimisation par minimisation du nombre de virements" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+      david = create_user(%{name: "David"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Quatuor", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id},
+          %{name: "David", email: david.email, user_id: david.id}
+        ])
+
+      # Alice paie 80€, Bob paie 40€, Charlie 0€, David 0€
+      # Total = 120€, part = 30€ chacun
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 1", amount: "80.00"})
+      {:ok, _} = Expenses.create_expense(bob, wallet, %{title: "Dépense 2", amount: "40.00"})
+
+      settlements = Expenses.calculate_settlements(wallet)
+      assert length(settlements) <= 3
+
+      total_transferred =
+        Enum.reduce(settlements, Decimal.new("0.00"), &Decimal.add(&2, &1.amount))
+
+      assert Decimal.equal?(total_transferred, Decimal.new("60.00"))
+    end
+
+    test "retourne une liste vide si tous les comptes sont équilibrés ou vide" do
+      %{creator: creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
+
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 1", amount: "50.00"})
+      {:ok, _} = Expenses.create_expense(bob, wallet, %{title: "Dépense 2", amount: "50.00"})
+
+      assert Expenses.calculate_settlements(wallet) == []
+      assert Wallets.calculate_settlements(wallet) == []
+      assert Wallets.optimize_settlements(wallet) == []
+    end
+  end
 end
