@@ -281,6 +281,7 @@ defmodule LesBonsComptes.Expenses do
   - `:balance` : Solde net (%Decimal{}), positif si créditeur, négatif si débiteur
   - `:amount` : Montant positif à recevoir si créditeur (%Decimal{}), sinon 0.00
   - `:amount_to_receive` : Alias de :amount
+  - `:amount_to_pay` : Montant positif à régler si débiteur (%Decimal{}), sinon 0.00
   - `:type` : `:creditor` (> 0), `:debtor` (< 0) ou `:balanced` (== 0)
   - `:currency` : Devise du porte-monnaie
   """
@@ -331,6 +332,207 @@ defmodule LesBonsComptes.Expenses do
   """
   defdelegate calculate_creditor_accounts(wallet_or_id), to: __MODULE__, as: :calculate_creditors
 
+  @doc """
+  Calcule les comptes débiteurs d'un porte-monnaie et les montants qu'ils doivent régler.
+  Filtre les participants qui doivent de l'argent (`balance < 0.00`).
+  Trie les comptes débiteurs par montant à régler décroissant.
+
+  Retourne une liste de maps contenant :
+  - `:member` : Struct `%WalletMember{}`
+  - `:member_id` : ID du membre
+  - `:name` : Nom du membre
+  - `:email` : Email du membre
+  - `:amount_to_pay` : Montant positif à régler (%Decimal{})
+  - `:amount` : Alias de `:amount_to_pay`
+  - `:total_paid` : Total payé par ce membre
+  - `:fair_share` : Part équitable due par chaque participant
+  - `:balance` : Solde net débiteur (%Decimal{})
+  - `:currency` : Devise du porte-monnaie
+  - `:type` : `:debtor`
+  """
+  def calculate_debtors(wallet_or_id) do
+    wallet_or_id
+    |> calculate_balances()
+    |> Enum.filter(&(&1.type == :debtor))
+    |> Enum.map(fn d -> %{d | amount: d.amount_to_pay} end)
+    |> Enum.sort_by(& &1.amount_to_pay, {:desc, Decimal})
+  end
+
+  @doc """
+  Alias pour `calculate_debtors/1`.
+  """
+  defdelegate list_debtors(wallet_or_id), to: __MODULE__, as: :calculate_debtors
+
+  @doc """
+  Alias pour `calculate_debtors/1` pour la sous-tâche de calcul des comptes débiteurs.
+  """
+  defdelegate calculate_debtor_accounts(wallet_or_id), to: __MODULE__, as: :calculate_debtors
+
+  @doc """
+  Calcule les virements optimisés entre participants pour solder l'ensemble des dettes
+  en minimisant le nombre total de transactions.
+
+  Algorithme :
+  1. Récupère les soldes calculés.
+  2. Isole les débiteurs (dette restante) et les créditeurs (créance restante).
+  3. Apparie en priorité les montants identiques (correspondance exacte 1 pour 1).
+  4. Apparie gloutonnement (greedy) le plus gros débiteur avec le plus gros créancier.
+  5. Ajuste si nécessaire les éventuels centimes résiduels dus aux arrondis de division.
+
+  Retourne une liste de virements :
+  [
+    %{
+      from_id: integer,
+      from_name: string,
+      from_email: string | nil,
+      to_id: integer,
+      to_name: string,
+      to_email: string | nil,
+      amount: %Decimal{},
+      currency: string
+    }
+  ]
+  """
+  def calculate_settlements(wallet_or_id) do
+    balances = calculate_balances(wallet_or_id)
+
+    debtors =
+      balances
+      |> Enum.filter(&(&1.type == :debtor and Decimal.gt?(&1.amount_to_pay, Decimal.new("0.00"))))
+      |> Enum.map(fn d ->
+        %{
+          id: d.member_id,
+          name: d.name,
+          email: d.email,
+          amount: d.amount_to_pay
+        }
+      end)
+
+    creditors =
+      balances
+      |> Enum.filter(&(&1.type == :creditor and Decimal.gt?(&1.amount_to_receive, Decimal.new("0.00"))))
+      |> Enum.map(fn c ->
+        %{
+          id: c.member_id,
+          name: c.name,
+          email: c.email,
+          amount: c.amount_to_receive
+        }
+      end)
+
+    currency =
+      case balances do
+        [%{currency: c} | _] -> c
+        _ -> "EUR"
+      end
+
+    do_optimize_settlements(debtors, creditors, currency)
+  end
+
+  @doc """
+  Alias pour `calculate_settlements/1`.
+  """
+  defdelegate optimize_settlements(wallet_or_id), to: __MODULE__, as: :calculate_settlements
+
+  defp do_optimize_settlements([], _creditors, _currency), do: []
+  defp do_optimize_settlements(_debtors, [], _currency), do: []
+
+  defp do_optimize_settlements(debtors, creditors, currency) do
+    {exact_transfers, remaining_debtors, remaining_creditors} =
+      extract_exact_matches(debtors, creditors, currency, [])
+
+    greedy_transfers =
+      greedy_settlement(remaining_debtors, remaining_creditors, currency, [])
+
+    exact_transfers ++ greedy_transfers
+  end
+
+  defp extract_exact_matches([], creditors, _currency, acc),
+    do: {Enum.reverse(acc), [], creditors}
+
+  defp extract_exact_matches(debtors, [], _currency, acc),
+    do: {Enum.reverse(acc), debtors, []}
+
+  defp extract_exact_matches([debtor | rest_debtors], creditors, currency, acc) do
+    case Enum.split_with(creditors, &Decimal.equal?(&1.amount, debtor.amount)) do
+      {[], _} ->
+        {transfers, rem_d, rem_c} = extract_exact_matches(rest_debtors, creditors, currency, acc)
+        {transfers, [debtor | rem_d], rem_c}
+
+      {[matched_creditor | other_matched], unmatched} ->
+        transfer = %{
+          from_id: debtor.id,
+          from_name: debtor.name,
+          from_email: debtor.email,
+          to_id: matched_creditor.id,
+          to_name: matched_creditor.name,
+          to_email: matched_creditor.email,
+          amount: Decimal.round(debtor.amount, 2),
+          currency: currency
+        }
+
+        new_creditors = other_matched ++ unmatched
+        extract_exact_matches(rest_debtors, new_creditors, currency, [transfer | acc])
+    end
+  end
+
+  defp greedy_settlement([], _creditors, _currency, acc), do: Enum.reverse(acc)
+  defp greedy_settlement(_debtors, [], _currency, acc), do: Enum.reverse(acc)
+
+  defp greedy_settlement(debtors, creditors, currency, acc) do
+    debtors =
+      debtors
+      |> Enum.filter(&Decimal.gt?(&1.amount, Decimal.new("0.00")))
+      |> Enum.sort_by(& &1.amount, {:desc, Decimal})
+
+    creditors =
+      creditors
+      |> Enum.filter(&Decimal.gt?(&1.amount, Decimal.new("0.00")))
+      |> Enum.sort_by(& &1.amount, {:desc, Decimal})
+
+    case {debtors, creditors} do
+      {[], _} ->
+        Enum.reverse(acc)
+
+      {_, []} ->
+        Enum.reverse(acc)
+
+      {[d | rest_d], [c | rest_c]} ->
+        transfer_amount =
+          if rest_d == [] and rest_c == [] do
+            c.amount
+          else
+            Decimal.min(d.amount, c.amount)
+          end
+
+        transfer = %{
+          from_id: d.id,
+          from_name: d.name,
+          from_email: d.email,
+          to_id: c.id,
+          to_name: c.name,
+          to_email: c.email,
+          amount: Decimal.round(transfer_amount, 2),
+          currency: currency
+        }
+
+        new_d_amount = Decimal.sub(d.amount, transfer_amount)
+        new_c_amount = Decimal.sub(c.amount, transfer_amount)
+
+        new_debtors =
+          if Decimal.gt?(new_d_amount, Decimal.new("0.00")),
+            do: [%{d | amount: new_d_amount} | rest_d],
+            else: rest_d
+
+        new_creditors =
+          if Decimal.gt?(new_c_amount, Decimal.new("0.00")),
+            do: [%{c | amount: new_c_amount} | rest_c],
+            else: rest_c
+
+        greedy_settlement(new_debtors, new_creditors, currency, [transfer | acc])
+    end
+  end
+
   defp do_calculate_balances(%{members_count: 0}), do: []
 
   defp do_calculate_balances(%{
@@ -361,6 +563,13 @@ defmodule LesBonsComptes.Expenses do
           Decimal.new("0.00")
         end
 
+      amount_to_pay =
+        if type == :debtor do
+          Decimal.abs(balance)
+        else
+          Decimal.new("0.00")
+        end
+
       %{
         member: member,
         member_id: member.id,
@@ -371,6 +580,7 @@ defmodule LesBonsComptes.Expenses do
         balance: balance,
         amount: amount_to_receive,
         amount_to_receive: amount_to_receive,
+        amount_to_pay: amount_to_pay,
         type: type,
         currency: currency
       }

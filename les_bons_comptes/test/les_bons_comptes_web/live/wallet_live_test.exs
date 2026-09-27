@@ -666,4 +666,148 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert msg =~ "n'existe pas ou est introuvable"
     end
   end
+
+  describe "Virements proposés et remboursement mock (IF-84)" do
+    test "affiche la section des virements proposés avec le flux et le montant exact", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Alice", email: "alice_virement@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_virement@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Vacances Barcelone", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      # Alice avance 100€, Bob 0€. Part = 50€ chacun. Bob doit 50€ à Alice.
+      {:ok, _} =
+        Expenses.create_expense(owner, wallet, %{
+          title: "Hôtel",
+          amount: "100.00"
+        })
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      # Vérification de la section des virements proposés
+      assert has_element?(view, "#wallet-settlements-section")
+      assert has_element?(view, "#wallet-settlements-list")
+      assert has_element?(view, "#settlements-count-badge", "1 virement(s)")
+      refute has_element?(view, "#no-settlements-message")
+
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      item_id = "#settlement-item-#{bob_member.id}-#{alice_member.id}"
+      assert has_element?(view, item_id)
+      rendered_item = element(view, item_id) |> render()
+      assert rendered_item =~ "Bob"
+      assert rendered_item =~ "Alice"
+      assert rendered_item =~ "doit donner"
+      assert rendered_item =~ "50.00 EUR"
+      assert rendered_item =~ "Virement conseillé"
+
+      # Bouton de simulation disponible
+      assert has_element?(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+      assert element(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}") |> render() =~
+               "Simuler le virement"
+    end
+
+    test "affiche un état vide informatif quand aucune dépense n'existe", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_vide@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_vide@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Porte-monnaie Vide", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#wallet-settlements-section")
+      assert has_element?(view, "#no-settlements-message")
+      assert render(view) =~ "Aucun virement nécessaire"
+      assert render(view) =~ "Ajoutez des dépenses au groupe"
+      refute has_element?(view, "#wallet-settlements-list")
+    end
+
+    test "affiche un état vide équilibré quand les dépenses sont réparties également", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Alice", email: "alice_equilibre@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_equilibre@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Équilibré", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      {:ok, _} =
+        Expenses.create_expense(owner, wallet, %{title: "Repas Alice", amount: "60.00"})
+
+      {:ok, _} =
+        Expenses.create_expense(bob, wallet, %{title: "Repas Bob", amount: "60.00"})
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      assert has_element?(view, "#wallet-settlements-section")
+      assert has_element?(view, "#no-settlements-message")
+      assert render(view) =~ "Les comptes sont parfaitement équilibrés !"
+      refute has_element?(view, "#wallet-settlements-list")
+    end
+
+    test "permet de simuler un virement (remboursement mock) puis de réinitialiser", %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_sim@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_sim@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Simulation Ski", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      {:ok, _} =
+        Expenses.create_expense(owner, wallet, %{title: "Location chalet", amount: "120.00"})
+
+      conn = authenticate_user(conn, owner)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      btn_id = "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}"
+      badge_id = "#mock-settled-badge-#{bob_member.id}-#{alice_member.id}"
+
+      assert has_element?(view, btn_id)
+      refute has_element?(view, badge_id)
+      refute has_element?(view, "#reset-mock-settlements-btn")
+
+      # 1. Clic sur Simuler le virement
+      view
+      |> element(btn_id)
+      |> render_click()
+
+      # Notification flash affichée
+      assert render(view) =~ "Simulation : Virement de 60.00 EUR de Bob vers Alice marqué comme réglé."
+
+      # Le bouton a disparu et est remplacé par le badge
+      refute has_element?(view, btn_id)
+      assert has_element?(view, badge_id)
+      assert element(view, badge_id) |> render() =~ "Réglé (Simulation)"
+
+      # Le bouton de réinitialisation apparaît
+      assert has_element?(view, "#reset-mock-settlements-btn")
+
+      # 2. Clic sur Réinitialiser les simulations
+      view
+      |> element("#reset-mock-settlements-btn")
+      |> render_click()
+
+      assert render(view) =~ "Les simulations de remboursements ont été réinitialisées."
+      assert has_element?(view, btn_id)
+      refute has_element?(view, badge_id)
+      refute has_element?(view, "#reset-mock-settlements-btn")
+    end
+  end
 end

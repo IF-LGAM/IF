@@ -309,4 +309,87 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     </div>
     """
   end
+
+  @doc """
+  Composant d'affichage d'un virement proposé entre comptes (IF-84).
+  Affiche le compte émetteur (débiteur), le flux vers le compte récepteur (créditeur),
+  le montant net optimisé à transférer, et le bouton/badge de simulation de remboursement (mock).
+  """
+  attr :settlement, :map, required: true
+  attr :currency, :string, default: "EUR"
+  attr :is_mock_settled, :boolean, default: false
+
+  def settlement_item(assigns) do
+    ~H"""
+    <div
+      id={"settlement-item-#{@settlement.from_id}-#{@settlement.to_id}"}
+      class={[
+        "py-3.5 px-4 rounded-xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4",
+        if(@is_mock_settled,
+          do: "bg-success/5 border-success/30 opacity-80",
+          else: "bg-base-100 border-base-200 hover:border-primary/30 hover:shadow-sm"
+        )
+      ]}
+    >
+      <div class="flex items-center gap-3 min-w-0">
+        <%!-- Débiteur --%>
+        <div class="flex items-center gap-2">
+          <.member_avatar name={@settlement.from_name} size="size-8" />
+          <div class="text-sm font-semibold text-base-content truncate">
+            <span>{@settlement.from_name}</span>
+          </div>
+        </div>
+
+        <%!-- Flèche directionnelle --%>
+        <div class="flex items-center gap-1 text-primary shrink-0 px-2.5 py-1 bg-primary/10 rounded-lg text-xs font-semibold">
+          <span>doit donner</span>
+          <.icon name="hero-arrow-right" class="size-3.5" />
+        </div>
+
+        <%!-- Créditeur --%>
+        <div class="flex items-center gap-2">
+          <.member_avatar name={@settlement.to_name} size="size-8" />
+          <div class="text-sm font-semibold text-base-content truncate">
+            <span>{@settlement.to_name}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+        <div class="text-right">
+          <span class="text-base font-bold text-primary">
+            {format_amount(@settlement.amount)} {@currency}
+          </span>
+          <div class="text-xs text-base-content/50">Virement conseillé</div>
+        </div>
+
+        <%= if @is_mock_settled do %>
+          <div
+            id={"mock-settled-badge-#{@settlement.from_id}-#{@settlement.to_id}"}
+            class="badge badge-success badge-sm gap-1 py-3 px-2.5 font-semibold shadow-sm"
+          >
+            <.icon name="hero-check-circle" class="size-4" />
+            <span>Réglé (Simulation)</span>
+          </div>
+        <% else %>
+          <button
+            type="button"
+            id={"mock-settle-btn-#{@settlement.from_id}-#{@settlement.to_id}"}
+            phx-click="mock_settle"
+            phx-value-from_id={@settlement.from_id}
+            phx-value-to_id={@settlement.to_id}
+            phx-value-from_name={@settlement.from_name}
+            phx-value-to_name={@settlement.to_name}
+            phx-value-amount={format_amount(@settlement.amount)}
+            class="btn btn-outline btn-success btn-xs gap-1 hover:shadow-sm"
+            title="Simuler ce remboursement"
+          >
+            <.icon name="hero-check" class="size-3.5" />
+            <span>Simuler le virement</span>
+          </button>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
 end

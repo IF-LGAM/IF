@@ -12,6 +12,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
         {:ok,
          socket
          |> assign(:page_title, "#{data.wallet.name} - Les Bons Comptes")
+         |> assign(:mock_settled_ids, MapSet.new())
          |> assign(data)}
 
       {:error, :not_found} ->
@@ -105,19 +106,54 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
     end
   end
 
+  @impl true
+  def handle_event(
+        "mock_settle",
+        %{
+          "from_id" => from_id,
+          "to_id" => to_id,
+          "from_name" => from_name,
+          "to_name" => to_name,
+          "amount" => amount
+        },
+        socket
+      ) do
+    settled_key = "#{from_id}->#{to_id}"
+    mock_settled_ids = MapSet.put(socket.assigns.mock_settled_ids, settled_key)
+    currency = socket.assigns.wallet.currency
+
+    {:noreply,
+     socket
+     |> assign(:mock_settled_ids, mock_settled_ids)
+     |> put_flash(
+       :info,
+       "Simulation : Virement de #{amount} #{currency} de #{from_name} vers #{to_name} marqué comme réglé."
+     )}
+  end
+
+  @impl true
+  def handle_event("reset_mock_settlements", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:mock_settled_ids, MapSet.new())
+     |> put_flash(:info, "Les simulations de remboursements ont été réinitialisées.")}
+  end
+
   defp load_wallet_data(wallet_id) do
     try do
       wallet = Wallets.get_wallet!(wallet_id)
       total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
       expenses_by_member = Expenses.total_expenses_by_member(wallet.id)
       creditors = Expenses.calculate_creditors(wallet)
+      settlements = Expenses.calculate_settlements(wallet)
 
       {:ok,
        %{
          wallet: wallet,
          total_expenses: total_expenses,
          expenses_by_member: expenses_by_member,
-         creditors: creditors
+         creditors: creditors,
+         settlements: settlements
        }}
     rescue
       _ in [Ecto.NoResultsError, ArgumentError] ->
@@ -355,6 +391,74 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               <div id="wallet-creditors-list" class="divide-y divide-base-200">
                 <%= for creditor <- @creditors do %>
                   <.creditor_item creditor={creditor} currency={@wallet.currency} />
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+        <%!-- Virements proposés (US : Calculer qui donne combien à qui en minimisant les virements) --%>
+        <div id="wallet-settlements-section" class="card bg-base-100 shadow-xl border border-base-200">
+          <div class="card-body p-6 sm:p-8 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-0.5">
+                <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
+                  <.icon name="hero-arrows-right-left" class="size-5 text-primary" />
+                  <span>Virements proposés ({length(@settlements)})</span>
+                </h2>
+                <p class="text-xs text-base-content/60">
+                  Transactions optimisées pour solder toutes les dettes avec le minimum de virements
+                </p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <%= if MapSet.size(@mock_settled_ids) > 0 do %>
+                  <button
+                    type="button"
+                    id="reset-mock-settlements-btn"
+                    phx-click="reset_mock_settlements"
+                    class="btn btn-ghost btn-xs text-base-content/70 hover:text-primary gap-1"
+                  >
+                    <.icon name="hero-arrow-path" class="size-3.5" />
+                    <span>Réinitialiser les simulations</span>
+                  </button>
+                <% end %>
+
+                <%= if @settlements != [] do %>
+                  <span id="settlements-count-badge" class="badge badge-primary badge-sm font-semibold">
+                    {length(@settlements)} virement(s)
+                  </span>
+                <% end %>
+              </div>
+            </div>
+
+            <%= if @settlements == [] do %>
+              <div
+                id="no-settlements-message"
+                class="text-center py-8 text-base-content/60 bg-base-200/30 rounded-xl border border-dashed border-base-300 space-y-2"
+              >
+                <%= if @wallet.expenses == [] do %>
+                  <.icon name="hero-arrows-right-left" class="size-8 mx-auto text-base-content/30" />
+                  <p class="font-medium text-sm">Aucun virement nécessaire</p>
+                  <p class="text-xs">
+                    Ajoutez des dépenses au groupe pour calculer automatiquement les virements optimisés entre participants.
+                  </p>
+                <% else %>
+                  <.icon name="hero-check-badge" class="size-8 mx-auto text-success/60" />
+                  <p class="font-medium text-sm">Les comptes sont parfaitement équilibrés !</p>
+                  <p class="text-xs">
+                    Chaque participant a payé sa part exacte. Aucun virement n'est nécessaire.
+                  </p>
+                <% end %>
+              </div>
+            <% else %>
+              <div id="wallet-settlements-list" class="space-y-3">
+                <%= for settlement <- @settlements do %>
+                  <.settlement_item
+                    settlement={settlement}
+                    currency={@wallet.currency}
+                    is_mock_settled={MapSet.member?(@mock_settled_ids, "#{settlement.from_id}->#{settlement.to_id}")}
+                  />
                 <% end %>
               </div>
             <% end %>

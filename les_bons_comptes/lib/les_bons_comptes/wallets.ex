@@ -38,13 +38,18 @@ defmodule LesBonsComptes.Wallets do
   defdelegate decline_invitation(user, invitation_or_id), to: Invitations, as: :decline
   defdelegate cancel_invitation(user, invitation_id), to: Invitations, as: :cancel
 
-  # Données nécessaires au calcul des soldes et comptes créditeurs
+  # Données nécessaires au calcul des soldes, comptes créditeurs, débiteurs et règlements
   defdelegate get_balance_data(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate fetch_balance_data(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate calculate_balances(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate calculate_creditors(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate calculate_creditor_accounts(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate list_creditors(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate calculate_debtors(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate calculate_debtor_accounts(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate list_debtors(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate calculate_settlements(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate optimize_settlements(wallet_or_id), to: LesBonsComptes.Expenses
 
   @doc """
   Retourne tous les porte-monnaies auxquels l'utilisateur participe
