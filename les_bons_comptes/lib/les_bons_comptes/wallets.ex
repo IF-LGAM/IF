@@ -50,6 +50,10 @@ defmodule LesBonsComptes.Wallets do
   defdelegate list_debtors(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate calculate_settlements(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate optimize_settlements(wallet_or_id), to: LesBonsComptes.Expenses
+  defdelegate mock_settle_transfer(wallet_or_id, params), to: LesBonsComptes.Expenses
+  defdelegate mock_settle_transfer(wallet_or_id, from_id, to_id, amount),
+    to: LesBonsComptes.Expenses
+  defdelegate mock_settle_all(wallet_or_id), to: LesBonsComptes.Expenses
 
   @doc """
   Retourne tous les porte-monnaies auxquels l'utilisateur participe
@@ -203,4 +207,53 @@ defmodule LesBonsComptes.Wallets do
   def delete_wallet(%Wallet{} = wallet) do
     Repo.delete(wallet)
   end
+
+  @doc """
+  Clôture un porte-monnaie (IF-85). Seul le propriétaire peut clore le groupe.
+  """
+  def close_wallet(%User{} = user, %Wallet{} = wallet) do
+    if owner?(wallet, user) do
+      close_wallet(wallet)
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc """
+  Clôture un porte-monnaie en passant son statut à "closed".
+  """
+  def close_wallet(%Wallet{} = wallet) do
+    update_wallet(wallet, %{status: "closed"})
+  end
+
+  @doc """
+  Rouvre un porte-monnaie clos (IF-85). Seul le propriétaire peut rouvrir le groupe.
+  """
+  def reopen_wallet(%User{} = user, %Wallet{} = wallet) do
+    if owner?(wallet, user) do
+      reopen_wallet(wallet)
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc """
+  Rouvre un porte-monnaie en repassant son statut à "open".
+  """
+  def reopen_wallet(%Wallet{} = wallet) do
+    update_wallet(wallet, %{status: "open"})
+  end
+
+  @doc """
+  Indique si le porte-monnaie est clos.
+  """
+  def closed?(%Wallet{} = wallet), do: Wallet.closed?(wallet)
+  def closed?(_), do: false
+
+  @doc """
+  Indique si le porte-monnaie est ouvert.
+  """
+  def open?(%Wallet{} = wallet), do: Wallet.open?(wallet)
+  def open?(_), do: false
 end
+

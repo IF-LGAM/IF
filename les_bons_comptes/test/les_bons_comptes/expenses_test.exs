@@ -707,4 +707,117 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Wallets.optimize_settlements(wallet) == []
     end
   end
+
+  describe "mock_settle_transfer/4 et mock_settle_all/1 (Action de remboursement mock pour un porte-monnaie clos - IF-85)" do
+    test "create_expense/3 est rejeté si le porte-monnaie est clos" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+
+      assert {:error, :wallet_closed} =
+               Expenses.create_expense(creator, closed_wallet, %{
+                 title: "Dépense interdite",
+                 amount: "20.00"
+               })
+    end
+
+    test "mock_settle_transfer est rejeté avec :wallet_not_closed si le porte-monnaie est ouvert" do
+      %{creator: _creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      assert wallet.status == "open"
+
+      assert {:error, :wallet_not_closed} =
+               Expenses.mock_settle_transfer(wallet, bob_member.id, alice_member.id, "30.00")
+
+      assert {:error, :wallet_not_closed} =
+               Wallets.mock_settle_transfer(wallet, %{
+                 from_id: bob_member.id,
+                 to_id: alice_member.id,
+                 amount: "30.00"
+               })
+    end
+
+    test "mock_settle_transfer réussit si le porte-monnaie est clos" do
+      %{creator: creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+
+      assert {:ok, mock_res} =
+               Expenses.mock_settle_transfer(closed_wallet, bob_member.id, alice_member.id, "40.00")
+
+      assert mock_res.status == "settled"
+      assert mock_res.simulated == true
+      assert mock_res.from_id == bob_member.id
+      assert mock_res.from_name == "Bob"
+      assert mock_res.to_id == alice_member.id
+      assert mock_res.to_name == "Alice"
+      assert Decimal.equal?(mock_res.amount, Decimal.new("40.00"))
+      assert mock_res.currency == "EUR"
+      assert %DateTime{} = mock_res.settled_at
+
+      # Fonctionne aussi par ID et via la map
+      assert {:ok, _} =
+               Expenses.mock_settle_transfer(closed_wallet.id, %{
+                 "from_id" => bob_member.id,
+                 "to_id" => alice_member.id,
+                 "amount" => "20.00"
+               })
+    end
+
+    test "mock_settle_transfer valide les identifiants de membres et montants" do
+      %{creator: creator, wallet: wallet} = setup_wallet_with_members()
+      alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
+      bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+
+      # Même membre
+      assert {:error, :identical_members} =
+               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, alice_member.id, "10.00")
+
+      # Membre inexistant
+      assert {:error, :member_not_found} =
+               Expenses.mock_settle_transfer(closed_wallet, 999_999, alice_member.id, "10.00")
+
+      # Montant invalide ou négatif
+      assert {:error, :invalid_amount} =
+               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "-10.00")
+
+      assert {:error, :invalid_amount} =
+               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "0.00")
+    end
+
+    test "mock_settle_all/1 simule tous les virements proposés pour un porte-monnaie clos" do
+      creator = create_user(%{name: "Alice"})
+      bob = create_user(%{name: "Bob"})
+      charlie = create_user(%{name: "Charlie"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(creator, %{name: "Trio Remboursement", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id},
+          %{name: "Charlie", email: charlie.email, user_id: charlie.id}
+        ])
+
+      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 90", amount: "90.00"})
+
+      # Rejeté si ouvert
+      assert {:error, :wallet_not_closed} = Expenses.mock_settle_all(wallet)
+
+      # Clôture du porte-monnaie
+      {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
+
+      # Succès une fois clos
+      assert {:ok, simulated_list} = Expenses.mock_settle_all(closed_wallet)
+      assert length(simulated_list) == 2
+
+      Enum.each(simulated_list, fn s ->
+        assert s.status == "settled"
+        assert s.simulated == true
+        assert s.to_name == "Alice"
+        assert Decimal.equal?(s.amount, Decimal.new("30.00"))
+      end)
+    end
+  end
 end

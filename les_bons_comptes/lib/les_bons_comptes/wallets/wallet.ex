@@ -11,6 +11,7 @@ defmodule LesBonsComptes.Wallets.Wallet do
     field :name, :string
     field :description, :string
     field :currency, :string, default: "EUR"
+    field :status, :string, default: "open"
 
     belongs_to :creator, LesBonsComptes.Accounts.User, foreign_key: :creator_id
     has_many :members, LesBonsComptes.Wallets.WalletMember, on_delete: :delete_all
@@ -21,13 +22,14 @@ defmodule LesBonsComptes.Wallets.Wallet do
   end
 
   @currencies ~w(EUR USD GBP CHF CAD)
+  @statuses ~w(open closed)
 
   @doc """
   Changeset pour la création ou modification d'un porte-monnaie commun.
   """
   def changeset(wallet, attrs) do
     wallet
-    |> cast(attrs, [:name, :description, :currency])
+    |> cast(attrs, [:name, :description, :currency, :status])
     |> validate_required([:name, :currency], message: "ce champ est obligatoire")
     |> validate_length(:name,
       min: 2,
@@ -36,6 +38,7 @@ defmodule LesBonsComptes.Wallets.Wallet do
     )
     |> validate_length(:description, max: 500, message: "ne doit pas dépasser 500 caractères")
     |> validate_inclusion(:currency, @currencies, message: "devise non supportée")
+    |> validate_inclusion(:status, @statuses, message: "statut invalide")
     |> foreign_key_constraint(:creator_id)
   end
 
@@ -56,4 +59,22 @@ defmodule LesBonsComptes.Wallets.Wallet do
   Retourne les options de devise formatées pour les select HTML.
   """
   def currency_options, do: @currency_options
+
+  @doc """
+  Retourne la liste des statuts supportés.
+  """
+  def supported_statuses, do: @statuses
+
+  @doc """
+  Indique si le porte-monnaie est clos.
+  """
+  def closed?(%__MODULE__{status: "closed"}), do: true
+  def closed?(_), do: false
+
+  @doc """
+  Indique si le porte-monnaie est ouvert.
+  """
+  def open?(%__MODULE__{status: "closed"}), do: false
+  def open?(%__MODULE__{}), do: true
+  def open?(_), do: false
 end

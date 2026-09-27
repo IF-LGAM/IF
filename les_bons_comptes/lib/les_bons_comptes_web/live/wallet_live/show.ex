@@ -107,6 +107,72 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
   end
 
   @impl true
+  def handle_event("close_wallet", _params, socket) do
+    current_user = socket.assigns.current_user
+    wallet = socket.assigns.wallet
+
+    case Wallets.close_wallet(current_user, wallet) do
+      {:ok, _updated_wallet} ->
+        case load_wallet_data(wallet.id) do
+          {:ok, data} ->
+            {:noreply,
+             socket
+             |> assign(data)
+             |> put_flash(
+               :info,
+               "Le porte-monnaie « #{wallet.name} » a été clôturé. Les virements et remboursements peuvent maintenant être exécutés."
+             )}
+
+          {:error, :not_found} ->
+            {:noreply, push_navigate(socket, to: ~p"/wallets")}
+        end
+
+      {:error, :unauthorized} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Seul le propriétaire peut clôturer ce porte-monnaie.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Impossible de clôturer ce porte-monnaie.")}
+    end
+  end
+
+  @impl true
+  def handle_event("reopen_wallet", _params, socket) do
+    current_user = socket.assigns.current_user
+    wallet = socket.assigns.wallet
+
+    case Wallets.reopen_wallet(current_user, wallet) do
+      {:ok, _updated_wallet} ->
+        case load_wallet_data(wallet.id) do
+          {:ok, data} ->
+            {:noreply,
+             socket
+             |> assign(data)
+             |> put_flash(
+               :info,
+               "Le porte-monnaie « #{wallet.name} » a été rouvert. Vous pouvez à nouveau y ajouter des dépenses."
+             )}
+
+          {:error, :not_found} ->
+            {:noreply, push_navigate(socket, to: ~p"/wallets")}
+        end
+
+      {:error, :unauthorized} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Seul le propriétaire peut rouvrir ce porte-monnaie.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Impossible de rouvrir ce porte-monnaie.")}
+    end
+  end
+
+  @impl true
   def handle_event(
         "mock_settle",
         %{
@@ -118,17 +184,28 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
         },
         socket
       ) do
-    settled_key = "#{from_id}->#{to_id}"
-    mock_settled_ids = MapSet.put(socket.assigns.mock_settled_ids, settled_key)
-    currency = socket.assigns.wallet.currency
+    wallet = socket.assigns.wallet
 
-    {:noreply,
-     socket
-     |> assign(:mock_settled_ids, mock_settled_ids)
-     |> put_flash(
-       :info,
-       "Simulation : Virement de #{amount} #{currency} de #{from_name} vers #{to_name} marqué comme réglé."
-     )}
+    if wallet.status != "closed" do
+      {:noreply,
+       socket
+       |> put_flash(
+         :error,
+         "Impossible d'effectuer le remboursement : le porte-monnaie doit d'abord être clôturé par son propriétaire."
+       )}
+    else
+      settled_key = "#{from_id}->#{to_id}"
+      mock_settled_ids = MapSet.put(socket.assigns.mock_settled_ids, settled_key)
+      currency = wallet.currency
+
+      {:noreply,
+       socket
+       |> assign(:mock_settled_ids, mock_settled_ids)
+       |> put_flash(
+         :info,
+         "Simulation : Virement de #{amount} #{currency} de #{from_name} vers #{to_name} marqué comme réglé."
+       )}
+    end
   end
 
   @impl true
@@ -193,6 +270,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                   <span id="wallet-currency-badge" class="badge badge-primary font-bold">
                     {@wallet.currency}
                   </span>
+                  <.wallet_status_badge status={@wallet.status} />
                 </div>
                 <p
                   :if={@wallet.description}
@@ -204,7 +282,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               </div>
 
               <div class="flex flex-wrap items-center gap-2">
-                <%= if @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
+                <%= if @wallet.status != "closed" and @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
                   <.link
                     navigate={~p"/wallets/#{@wallet.id}/expenses/new"}
                     id="add-expense-btn"
@@ -216,6 +294,30 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                 <% end %>
 
                 <%= if @current_user && @current_user.id == @wallet.creator_id do %>
+                  <%= if @wallet.status == "closed" do %>
+                    <button
+                      type="button"
+                      id="reopen-wallet-btn"
+                      phx-click="reopen_wallet"
+                      data-confirm="Êtes-vous sûr de vouloir rouvrir ce porte-monnaie ? Vous pourrez à nouveau y ajouter des dépenses."
+                      class="btn btn-outline btn-info btn-sm gap-1"
+                    >
+                      <.icon name="hero-lock-open" class="size-4" />
+                      <span>Rouvrir</span>
+                    </button>
+                  <% else %>
+                    <button
+                      type="button"
+                      id="close-wallet-btn"
+                      phx-click="close_wallet"
+                      data-confirm="Êtes-vous sûr de vouloir clôturer ce porte-monnaie ? Une fois clos, vous pourrez exécuter les virements et remboursements."
+                      class="btn btn-outline btn-neutral btn-sm gap-1"
+                    >
+                      <.icon name="hero-lock-closed" class="size-4" />
+                      <span>Clôturer</span>
+                    </button>
+                  <% end %>
+
                   <.link
                     navigate={~p"/wallets/#{@wallet.id}/edit"}
                     id="edit-wallet-btn"
@@ -302,7 +404,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                 <span>Dépenses ({length(@wallet.expenses)})</span>
               </h2>
 
-              <%= if @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
+              <%= if @wallet.status != "closed" and @current_user && Enum.any?(@wallet.members, &(&1.user_id == @current_user.id)) do %>
                 <.link
                   navigate={~p"/wallets/#{@wallet.id}/expenses/new"}
                   id="section-add-expense-btn"
@@ -483,6 +585,40 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               </div>
             </div>
 
+            <%= if @wallet.status != "closed" do %>
+              <div
+                id="wallet-open-notice"
+                class="p-3 bg-warning/10 border border-warning/30 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              >
+                <div class="flex items-center gap-2 text-base-content/80">
+                  <.icon name="hero-information-circle" class="size-5 text-warning shrink-0" />
+                  <span>Le porte-monnaie est actuellement ouvert. Clôturez-le pour pouvoir simuler les virements et remboursements.</span>
+                </div>
+
+                <%= if @current_user && @current_user.id == @wallet.creator_id do %>
+                  <button
+                    type="button"
+                    id="notice-close-wallet-btn"
+                    phx-click="close_wallet"
+                    data-confirm="Êtes-vous sûr de vouloir clôturer ce porte-monnaie ? Une fois clos, vous pourrez exécuter les virements et remboursements."
+                    class="btn btn-warning btn-xs shrink-0 gap-1 font-semibold"
+                  >
+                    <.icon name="hero-lock-closed" class="size-3" />
+                    <span>Clôturer maintenant</span>
+                  </button>
+                <% end %>
+              </div>
+            <% end %>
+
+            <%= if @settlements != [] do %>
+              <.simulated_settlements_summary
+                settlements={@settlements}
+                mock_settled_ids={@mock_settled_ids}
+                currency={@wallet.currency}
+                is_closed={@wallet.status == "closed"}
+              />
+            <% end %>
+
             <%= if @settlements == [] do %>
               <div
                 id="no-settlements-message"
@@ -509,6 +645,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                     settlement={settlement}
                     currency={@wallet.currency}
                     is_mock_settled={MapSet.member?(@mock_settled_ids, "#{settlement.from_id}->#{settlement.to_id}")}
+                    is_closed={@wallet.status == "closed"}
                   />
                 <% end %>
               </div>

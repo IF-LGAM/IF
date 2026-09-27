@@ -758,7 +758,8 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#wallet-settlements-list")
     end
 
-    test "permet de simuler un virement (remboursement mock) puis de réinitialiser", %{conn: conn} do
+    test "gère les erreurs quand le porte-monnaie est ouvert, permet de le clore, puis de simuler et réinitialiser",
+         %{conn: conn} do
       owner = create_user(%{name: "Alice", email: "alice_sim@test.com"})
       bob = create_user(%{name: "Bob", email: "bob_sim@test.com"})
 
@@ -779,35 +780,90 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       btn_id = "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}"
       badge_id = "#mock-settled-badge-#{bob_member.id}-#{alice_member.id}"
 
-      assert has_element?(view, btn_id)
+      # Statut initial : Ouvert
+      assert has_element?(view, "#wallet-status-badge", "Ouvert")
+      assert has_element?(view, "#wallet-open-notice")
+      assert has_element?(view, "#close-wallet-btn")
+      assert has_element?(view, "#simulated-settlements-summary")
+      assert element(view, "#settlement-progress-badge") |> render() =~ "0 / 1 virement(s) simulé(s)"
+
+      # 1. Tentative de simulation alors que le porte-monnaie est ouvert -> Erreur explicite
+      view |> element(btn_id) |> render_click()
+
+      assert has_element?(
+               view,
+               "#flash-error",
+               "Impossible d'effectuer le remboursement : le porte-monnaie doit d'abord être clôturé par son propriétaire."
+             )
+
       refute has_element?(view, badge_id)
-      refute has_element?(view, "#reset-mock-settlements-btn")
 
-      # 1. Clic sur Simuler le virement
-      view
-      |> element(btn_id)
-      |> render_click()
+      # 2. Clôture du porte-monnaie par le propriétaire
+      assert view
+             |> element("#close-wallet-btn")
+             |> render_click() =~ "Le porte-monnaie « Simulation Ski » a été clôturé."
 
-      # Notification flash affichée
-      assert render(view) =~ "Simulation : Virement de 60.00 EUR de Bob vers Alice marqué comme réglé."
+      assert has_element?(view, "#wallet-status-badge", "Clos")
+      assert has_element?(view, "#reopen-wallet-btn")
+      refute has_element?(view, "#wallet-open-notice")
+      refute has_element?(view, "#add-expense-btn")
+
+      # 3. Maintenant que le porte-monnaie est clos, le clic sur Simuler le virement réussit
+      assert view
+             |> element(btn_id)
+             |> render_click() =~
+               "Simulation : Virement de 60.00 EUR de Bob vers Alice marqué comme réglé."
 
       # Le bouton a disparu et est remplacé par le badge
       refute has_element?(view, btn_id)
       assert has_element?(view, badge_id)
       assert element(view, badge_id) |> render() =~ "Réglé (Simulation)"
 
+      # La répartition des remboursements est mise à jour (100% complété)
+      assert element(view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) simulé(s)"
+      assert element(view, "#summary-settled-amount") |> render() =~ "60.00 EUR"
+      assert element(view, "#summary-remaining-amount") |> render() =~ "0.00 EUR"
+      assert has_element?(view, "#all-settlements-completed-message")
+
       # Le bouton de réinitialisation apparaît
       assert has_element?(view, "#reset-mock-settlements-btn")
 
-      # 2. Clic sur Réinitialiser les simulations
-      view
-      |> element("#reset-mock-settlements-btn")
-      |> render_click()
+      # 4. Clic sur Réinitialiser les simulations
+      assert view
+             |> element("#reset-mock-settlements-btn")
+             |> render_click() =~ "Les simulations de remboursements ont été réinitialisées."
 
-      assert render(view) =~ "Les simulations de remboursements ont été réinitialisées."
       assert has_element?(view, btn_id)
       refute has_element?(view, badge_id)
       refute has_element?(view, "#reset-mock-settlements-btn")
+      refute has_element?(view, "#all-settlements-completed-message")
+
+      # 5. Réouverture du porte-monnaie
+      assert view
+             |> element("#reopen-wallet-btn")
+             |> render_click() =~ "Le porte-monnaie « Simulation Ski » a été rouvert."
+
+      assert has_element?(view, "#wallet-status-badge", "Ouvert")
+      assert has_element?(view, "#close-wallet-btn")
+      assert has_element?(view, "#add-expense-btn")
+    end
+
+    test "un membre non propriétaire ne voit pas les boutons pour clore ou rouvrir le porte-monnaie",
+         %{conn: conn} do
+      owner = create_user(%{name: "Alice", email: "alice_non_owner@test.com"})
+      bob = create_user(%{name: "Bob", email: "bob_non_owner@test.com"})
+
+      {:ok, wallet} =
+        Wallets.create_wallet(owner, %{name: "Groupe Amis", currency: "EUR"}, [
+          %{name: "Bob", email: bob.email, user_id: bob.id}
+        ])
+
+      conn = authenticate_user(conn, bob)
+      {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
+
+      refute has_element?(view, "#close-wallet-btn")
+      refute has_element?(view, "#reopen-wallet-btn")
+      refute has_element?(view, "#notice-close-wallet-btn")
     end
   end
 

@@ -397,4 +397,65 @@ defmodule LesBonsComptes.WalletsTest do
       assert Wallets.list_pending_invitations_for_wallet(wallet.id) == []
     end
   end
+
+  describe "Statut et clôture du porte-monnaie (IF-85)" do
+    test "un nouveau porte-monnaie a le statut 'open' par défaut" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Porte-monnaie Ouvert"})
+
+      assert wallet.status == "open"
+      assert Wallets.open?(wallet)
+      refute Wallets.closed?(wallet)
+    end
+
+    test "close_wallet/2 permet au propriétaire de clôturer le porte-monnaie" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "À Clôturer"})
+
+      assert {:ok, closed_wallet} = Wallets.close_wallet(owner, wallet)
+      assert closed_wallet.status == "closed"
+      assert Wallets.closed?(closed_wallet)
+      refute Wallets.open?(closed_wallet)
+    end
+
+    test "close_wallet/2 rejette la clôture par un non-propriétaire" do
+      owner = create_user()
+      stranger = create_user(%{email: "stranger@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Protégé"})
+
+      assert Wallets.close_wallet(stranger, wallet) == {:error, :unauthorized}
+      reloaded = Wallets.get_wallet!(wallet.id)
+      assert reloaded.status == "open"
+    end
+
+    test "reopen_wallet/2 permet au propriétaire de rouvrir un porte-monnaie clos" do
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "À Rouvrir"})
+      {:ok, closed_wallet} = Wallets.close_wallet(owner, wallet)
+      assert closed_wallet.status == "closed"
+
+      assert {:ok, reopened_wallet} = Wallets.reopen_wallet(owner, closed_wallet)
+      assert reopened_wallet.status == "open"
+      assert Wallets.open?(reopened_wallet)
+    end
+
+    test "reopen_wallet/2 rejette la réouverture par un non-propriétaire" do
+      owner = create_user()
+      stranger = create_user(%{email: "stranger2@test.com"})
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Clos"})
+      {:ok, closed_wallet} = Wallets.close_wallet(owner, wallet)
+
+      assert Wallets.reopen_wallet(stranger, closed_wallet) == {:error, :unauthorized}
+    end
+
+    test "validation du statut dans le changeset" do
+      wallet = %Wallet{}
+      valid_changeset = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "closed"})
+      assert valid_changeset.valid?
+
+      invalid_changeset = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "invalid_status"})
+      refute invalid_changeset.valid?
+      assert "statut invalide" in errors_on(invalid_changeset).status
+    end
+  end
 end

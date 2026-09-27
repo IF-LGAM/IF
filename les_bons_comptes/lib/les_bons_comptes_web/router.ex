@@ -48,6 +48,7 @@ defmodule LesBonsComptesWeb.Router do
     pipe_through :api
 
     get "/wallets/:id/settlements", SettlementController, :index
+    post "/wallets/:id/settlements/mock", SettlementController, :mock
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

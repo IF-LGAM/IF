@@ -50,10 +50,15 @@ defmodule LesBonsComptes.Expenses do
     wallet = Repo.preload(wallet, [:members])
     user_member = Enum.find(wallet.members, &(&1.user_id == user.id))
 
-    if is_nil(user_member) do
-      {:error, :unauthorized}
-    else
-      payer_id = resolve_payer_id(attrs[:payer_id] || attrs["payer_id"], user_member.id)
+    cond do
+      wallet.status == "closed" ->
+        {:error, :wallet_closed}
+
+      is_nil(user_member) ->
+        {:error, :unauthorized}
+
+      true ->
+        payer_id = resolve_payer_id(attrs[:payer_id] || attrs["payer_id"], user_member.id)
 
       case validate_payer_in_wallet(wallet, payer_id, attrs) do
         :ok ->
@@ -586,4 +591,172 @@ defmodule LesBonsComptes.Expenses do
       }
     end)
   end
+
+  # ---------------------------------------------------------------------------
+  # Action de remboursement simulé (Mock) pour un porte-monnaie clos (IF-85)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Exécute une action de remboursement simulé (mock) pour un porte-monnaie clos (IF-85).
+  Prend en paramètre un porte-monnaie (%Wallet{} ou id) et une map d'attributs (%{from_id: ..., to_id: ..., amount: ...}).
+  """
+  def mock_settle_transfer(wallet_or_id, params) when is_map(params) do
+    from_id = params[:from_id] || params["from_id"]
+    to_id = params[:to_id] || params["to_id"]
+    amount = params[:amount] || params["amount"]
+
+    mock_settle_transfer(wallet_or_id, from_id, to_id, amount)
+  end
+
+  @doc """
+  Exécute une action de remboursement simulé (mock) entre deux membres pour un montant donné (IF-85).
+  Règles métier :
+  - Le porte-monnaie doit exister.
+  - Le porte-monnaie doit être clos (status == "closed"). Si ce n'est pas le cas, retourne `{:error, :wallet_not_closed}`.
+  - Les membres émetteur et récepteur doivent appartenir au porte-monnaie et être distincts.
+  - Le montant doit être supérieur à zéro.
+  """
+  def mock_settle_transfer(wallet_or_id, from_id, to_id, amount) do
+    case resolve_wallet_for_mock(wallet_or_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Wallet{status: status} when status != "closed" ->
+        {:error, :wallet_not_closed}
+
+      %Wallet{} = wallet ->
+        do_mock_settle_transfer(wallet, from_id, to_id, amount)
+    end
+  end
+
+  @doc """
+  Simule l'ensemble des remboursements proposés pour un porte-monnaie clos.
+  Retourne `{:ok, settlements}` ou `{:error, reason}`.
+  """
+  def mock_settle_all(wallet_or_id) do
+    case resolve_wallet_for_mock(wallet_or_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Wallet{status: status} when status != "closed" ->
+        {:error, :wallet_not_closed}
+
+      %Wallet{} = wallet ->
+        settlements = calculate_settlements(wallet)
+
+        simulated =
+          Enum.map(settlements, fn s ->
+            %{
+              id: "mock_#{System.unique_integer([:positive])}",
+              wallet_id: wallet.id,
+              from_id: s.from_id,
+              from_name: s.from_name,
+              from_email: s.from_email,
+              to_id: s.to_id,
+              to_name: s.to_name,
+              to_email: s.to_email,
+              amount: s.amount,
+              currency: s.currency,
+              status: "settled",
+              simulated: true,
+              settled_at: DateTime.utc_now()
+            }
+          end)
+
+        {:ok, simulated}
+    end
+  end
+
+  defp resolve_wallet_for_mock(%Wallet{id: id}) when not is_nil(id) do
+    case Repo.get(Wallet, id) do
+      nil -> nil
+      wallet -> Repo.preload(wallet, [:members])
+    end
+  end
+
+  defp resolve_wallet_for_mock(id) when is_integer(id) do
+    case Repo.get(Wallet, id) do
+      nil -> nil
+      wallet -> Repo.preload(wallet, [:members])
+    end
+  end
+
+  defp resolve_wallet_for_mock(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int_id, ""} -> resolve_wallet_for_mock(int_id)
+      _ -> nil
+    end
+  end
+
+  defp resolve_wallet_for_mock(_), do: nil
+
+  defp do_mock_settle_transfer(%Wallet{} = wallet, from_id, to_id, amount) do
+    with {:ok, parsed_from_id} <- parse_member_id(from_id),
+         {:ok, parsed_to_id} <- parse_member_id(to_id),
+         :ok <- validate_distinct_members(parsed_from_id, parsed_to_id),
+         {:ok, from_member} <- find_wallet_member(wallet, parsed_from_id),
+         {:ok, to_member} <- find_wallet_member(wallet, parsed_to_id),
+         {:ok, dec_amount} <- parse_settle_amount(amount) do
+      result = %{
+        id: "mock_#{System.unique_integer([:positive])}",
+        wallet_id: wallet.id,
+        from_id: from_member.id,
+        from_name: from_member.name,
+        from_email: from_member.email,
+        to_id: to_member.id,
+        to_name: to_member.name,
+        to_email: to_member.email,
+        amount: dec_amount,
+        currency: wallet.currency,
+        status: "settled",
+        simulated: true,
+        settled_at: DateTime.utc_now()
+      }
+
+      {:ok, result}
+    end
+  end
+
+  defp parse_member_id(id) when is_integer(id), do: {:ok, id}
+
+  defp parse_member_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int_id, ""} -> {:ok, int_id}
+      _ -> {:error, :invalid_member_id}
+    end
+  end
+
+  defp parse_member_id(_), do: {:error, :invalid_member_id}
+
+  defp validate_distinct_members(id, id), do: {:error, :identical_members}
+  defp validate_distinct_members(_, _), do: :ok
+
+  defp find_wallet_member(%Wallet{members: members}, member_id) do
+    case Enum.find(members || [], &(&1.id == member_id)) do
+      nil -> {:error, :member_not_found}
+      member -> {:ok, member}
+    end
+  end
+
+  defp parse_settle_amount(%Decimal{} = dec) do
+    if Decimal.gt?(dec, Decimal.new("0.00")) do
+      {:ok, Decimal.round(dec, 2)}
+    else
+      {:error, :invalid_amount}
+    end
+  end
+
+  defp parse_settle_amount(num) when is_number(num) do
+    parse_settle_amount(Decimal.from_float(num * 1.0))
+  end
+
+  defp parse_settle_amount(str) when is_binary(str) do
+    case Decimal.parse(str) do
+      {dec, ""} -> parse_settle_amount(dec)
+      _ -> {:error, :invalid_amount}
+    end
+  end
+
+  defp parse_settle_amount(_), do: {:error, :invalid_amount}
 end
+
