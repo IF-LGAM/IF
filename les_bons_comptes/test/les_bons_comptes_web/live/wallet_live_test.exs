@@ -1256,4 +1256,136 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#invited-wallet-card-#{wallet.id}")
     end
   end
+
+  describe "Epic: Lister les portes-monnaies ouverts & US associées" do
+    test "affiche la liste des portes-monnaies ouverts avec filtrage", %{conn: conn} do
+      user = create_user()
+      {:ok, open_wallet} = Wallets.create_wallet(user, %{name: "Vacances Espagne"})
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Ski 2025"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      conn = authenticate_user(conn, user)
+
+      # 1. Navigation directe via /wallets/open
+      {:ok, view, _html} = live(conn, ~p"/wallets/open")
+
+      assert has_element?(view, "#page-main-heading", "Portes-monnaies ouverts")
+      assert has_element?(view, "#wallet-card-#{open_wallet.id}")
+      assert has_element?(view, "#wallet-status-badge-#{open_wallet.id}")
+      assert element(view, "#wallet-status-badge-#{open_wallet.id}") |> render() =~ "Ouvert"
+      refute has_element?(view, "#wallet-card-#{closed_wallet.id}")
+
+      # 2. Filtrage interactif depuis /wallets via le bouton de filtre "Ouverts"
+      {:ok, index_view, _html} = live(conn, ~p"/wallets")
+      assert has_element?(index_view, "#wallet-filter-open")
+
+      index_view
+      |> element("#wallet-filter-open")
+      |> render_click()
+
+      assert_patch(index_view, ~p"/wallets/open")
+      assert has_element?(index_view, "#wallet-card-#{open_wallet.id}")
+      refute has_element?(index_view, "#wallet-card-#{closed_wallet.id}")
+    end
+
+    test "gestion des états vides pour les portes-monnaies ouverts", %{conn: conn} do
+      user = create_user()
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Weekend Passé"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      conn = authenticate_user(conn, user)
+      {:ok, view, _html} = live(conn, ~p"/wallets/open")
+
+      assert has_element?(view, "#empty-open-wallets-state")
+      assert render(view) =~ "Aucun porte-monnaie ouvert pour le moment"
+      assert has_element?(view, "#create-open-wallet-btn")
+      assert has_element?(view, "#reset-open-wallet-filter-btn")
+
+      # Clic sur le bouton de réinitialisation
+      view
+      |> element("#reset-open-wallet-filter-btn")
+      |> render_click()
+
+      assert_patch(view, ~p"/wallets")
+      assert has_element?(view, "#wallet-card-#{closed_wallet.id}")
+    end
+
+    test "gestion de l'erreur de chargement des portes-monnaies et réessai", %{conn: conn} do
+      user = create_user()
+      {:ok, wallet} = Wallets.create_wallet(user, %{name: "Projet Coloc"})
+
+      conn = authenticate_user(conn, user)
+      {:ok, view, _html} = live(conn, ~p"/wallets/open")
+
+      assert has_element?(view, "#wallet-card-#{wallet.id}")
+
+      # Simulation de l'erreur
+      render_hook(view, "simulate_wallets_error", %{})
+
+      assert has_element?(view, "#wallets-error-state")
+      assert render(view) =~ "Erreur de chargement des porte-monnaies"
+      assert has_element?(view, "#retry-load-wallets-btn")
+      refute has_element?(view, "#wallet-card-#{wallet.id}")
+
+      # Réessayer
+      view
+      |> element("#retry-load-wallets-btn")
+      |> render_click()
+
+      refute has_element?(view, "#wallets-error-state")
+      assert has_element?(view, "#wallet-card-#{wallet.id}")
+    end
+  end
+
+  describe "Epic: Lister les portes-monnaies clos & US associées" do
+    test "affiche la liste des portes-monnaies clos avec filtrage", %{conn: conn} do
+      user = create_user()
+      {:ok, open_wallet} = Wallets.create_wallet(user, %{name: "Compte Actif"})
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Compte Terminé"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      conn = authenticate_user(conn, user)
+
+      # 1. Navigation directe via /wallets/closed
+      {:ok, view, _html} = live(conn, ~p"/wallets/closed")
+
+      assert has_element?(view, "#page-main-heading", "Portes-monnaies clos")
+      assert has_element?(view, "#wallet-card-#{closed_wallet.id}")
+      assert has_element?(view, "#wallet-status-badge-#{closed_wallet.id}")
+      assert element(view, "#wallet-status-badge-#{closed_wallet.id}") |> render() =~ "Clos"
+      refute has_element?(view, "#wallet-card-#{open_wallet.id}")
+
+      # 2. Filtrage interactif depuis /wallets via le bouton de filtre "Clos"
+      {:ok, index_view, _html} = live(conn, ~p"/wallets")
+      assert has_element?(index_view, "#wallet-filter-closed")
+
+      index_view
+      |> element("#wallet-filter-closed")
+      |> render_click()
+
+      assert_patch(index_view, ~p"/wallets/closed")
+      assert has_element?(index_view, "#wallet-card-#{closed_wallet.id}")
+      refute has_element?(index_view, "#wallet-card-#{open_wallet.id}")
+    end
+
+    test "gestion des états vides pour les portes-monnaies clos", %{conn: conn} do
+      user = create_user()
+      {:ok, open_wallet} = Wallets.create_wallet(user, %{name: "Compte En Cours"})
+
+      conn = authenticate_user(conn, user)
+      {:ok, view, _html} = live(conn, ~p"/wallets/closed")
+
+      assert has_element?(view, "#empty-closed-wallets-state")
+      assert render(view) =~ "Aucun porte-monnaie clos pour le moment"
+      assert has_element?(view, "#reset-closed-wallet-filter-btn")
+
+      # Clic sur le bouton de réinitialisation
+      view
+      |> element("#reset-closed-wallet-filter-btn")
+      |> render_click()
+
+      assert_patch(view, ~p"/wallets")
+      assert has_element?(view, "#wallet-card-#{open_wallet.id}")
+    end
+  end
 end

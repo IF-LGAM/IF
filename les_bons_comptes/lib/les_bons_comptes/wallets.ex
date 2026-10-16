@@ -79,17 +79,113 @@ defmodule LesBonsComptes.Wallets do
   @doc """
   Retourne tous les porte-monnaies auxquels l'utilisateur participe
   (soit comme créateur, soit comme membre enregistré).
+  Permet de filtrer optionnellement par statut ("open", "closed", "pending_settlement", "all").
   """
-  def list_wallets_for_user(user_id) when is_integer(user_id) do
-    from(w in Wallet,
-      left_join: m in assoc(w, :members),
-      where: w.creator_id == ^user_id or m.user_id == ^user_id,
-      distinct: true,
-      order_by: [desc: w.inserted_at],
-      preload: [:creator, :members]
-    )
+  def list_wallets_for_user(user_or_id, status \\ nil)
+
+  def list_wallets_for_user(%User{id: user_id}, status),
+    do: list_wallets_for_user(user_id, status)
+
+  def list_wallets_for_user(user_id, status) when is_integer(user_id) do
+    query =
+      from(w in Wallet,
+        left_join: m in assoc(w, :members),
+        where: w.creator_id == ^user_id or m.user_id == ^user_id,
+        distinct: true,
+        order_by: [desc: w.inserted_at],
+        preload: [:creator, :members]
+      )
+
+    query
+    |> filter_wallets_by_status(status)
     |> Repo.all()
   end
+
+  @doc """
+  Récupère les porte-monnaies d'un utilisateur sous forme de tuple {:ok, wallets} ou {:error, reason}
+  pour une gestion robuste des erreurs de chargement (US: Gestion des erreurs de chargement).
+  """
+  def fetch_wallets_for_user(user_or_id, status \\ nil) do
+    try do
+      {:ok, list_wallets_for_user(user_or_id, status)}
+    rescue
+      e -> {:error, e}
+    end
+  end
+
+  @doc """
+  Récupère uniquement les porte-monnaies ouverts d'un utilisateur (US: Récupération des portes-monnaies ouverts).
+  """
+  def list_open_wallets_for_user(user_or_id) do
+    list_wallets_for_user(user_or_id, "open")
+  end
+
+  @doc """
+  Récupère les porte-monnaies ouverts sous forme de résultat {:ok, wallets} ou {:error, reason}.
+  """
+  def fetch_open_wallets(user_or_id) do
+    fetch_wallets_for_user(user_or_id, "open")
+  end
+
+  @doc """
+  Récupère uniquement les porte-monnaies clos d'un utilisateur (US: Récupération des portes-monnaies clos).
+  """
+  def list_closed_wallets_for_user(user_or_id) do
+    list_wallets_for_user(user_or_id, "closed")
+  end
+
+  @doc """
+  Récupère les porte-monnaies clos sous forme de résultat {:ok, wallets} ou {:error, reason}.
+  """
+  def fetch_closed_wallets(user_or_id) do
+    fetch_wallets_for_user(user_or_id, "closed")
+  end
+
+  @doc """
+  Filtre une requête ou une liste de porte-monnaies par statut (US: Filtrage par statut).
+  Accepte 'all', 'open', 'closed', 'pending_settlement', 'active' (atome ou chaîne).
+  """
+  def filter_wallets_by_status(query_or_list, status)
+
+  def filter_wallets_by_status(%Ecto.Query{} = query, status) do
+    case normalize_wallet_status(status) do
+      :ignore -> query
+      :all -> query
+      "active" -> from(w in query, where: w.status in ["open", "pending_settlement"])
+      {:unknown, _} -> from(w in query, where: false)
+      target -> from(w in query, where: w.status == ^target)
+    end
+  end
+
+  def filter_wallets_by_status(list, status) when is_list(list) do
+    case normalize_wallet_status(status) do
+      :ignore -> list
+      :all -> list
+      "active" -> Enum.filter(list, &(&1.status in ["open", "pending_settlement"]))
+      {:unknown, _} -> []
+      target -> Enum.filter(list, &(&1.status == target))
+    end
+  end
+
+  defp normalize_wallet_status(nil), do: :ignore
+  defp normalize_wallet_status(:all), do: :all
+  defp normalize_wallet_status("all"), do: :all
+  defp normalize_wallet_status(""), do: :all
+
+  defp normalize_wallet_status(status) when is_atom(status) do
+    normalize_wallet_status(Atom.to_string(status))
+  end
+
+  defp normalize_wallet_status(status) when is_binary(status) do
+    case String.downcase(String.trim(status)) do
+      "all" -> :all
+      "active" -> "active"
+      valid when valid in ~w(open closed pending_settlement) -> valid
+      other -> {:unknown, other}
+    end
+  end
+
+  defp normalize_wallet_status(_), do: :ignore
 
   @doc """
   Récupère un porte-monnaie par son ID avec ses membres, ses invitations et son créateur. Lève si introuvable.

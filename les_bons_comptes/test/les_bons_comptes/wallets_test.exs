@@ -652,4 +652,63 @@ defmodule LesBonsComptes.WalletsTest do
       assert {:ok, []} = Wallets.fetch_invited_wallets(user.id)
     end
   end
+
+  describe "Lister les portes-monnaies ouverts et clos (Epics) & Filtrage (US)" do
+    test "list_open_wallets_for_user/1 et fetch_open_wallets/1 récupèrent uniquement les comptes ouverts" do
+      user = create_user()
+
+      {:ok, open_wallet1} = Wallets.create_wallet(user, %{name: "Open Wallet 1"})
+      {:ok, open_wallet2} = Wallets.create_wallet(user, %{name: "Open Wallet 2"})
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Closed Wallet"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      open_wallets = Wallets.list_open_wallets_for_user(user)
+      assert length(open_wallets) == 2
+      assert Enum.all?(open_wallets, &(&1.status == "open"))
+      assert Enum.any?(open_wallets, &(&1.id == open_wallet1.id))
+      assert Enum.any?(open_wallets, &(&1.id == open_wallet2.id))
+      refute Enum.any?(open_wallets, &(&1.id == closed_wallet.id))
+
+      assert {:ok, fetched_open} = Wallets.fetch_open_wallets(user.id)
+      assert length(fetched_open) == 2
+    end
+
+    test "list_closed_wallets_for_user/1 et fetch_closed_wallets/1 récupèrent uniquement les comptes clos" do
+      user = create_user()
+
+      {:ok, _open_wallet} = Wallets.create_wallet(user, %{name: "Open Wallet"})
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Closed Wallet"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      closed_wallets = Wallets.list_closed_wallets_for_user(user)
+      assert length(closed_wallets) == 1
+      assert hd(closed_wallets).id == closed_wallet.id
+      assert hd(closed_wallets).status == "closed"
+
+      assert {:ok, fetched_closed} = Wallets.fetch_closed_wallets(user.id)
+      assert length(fetched_closed) == 1
+      assert hd(fetched_closed).id == closed_wallet.id
+    end
+
+    test "filter_wallets_by_status/2 filtre correctement les requêtes Ecto et les listes" do
+      user = create_user()
+      {:ok, _open_w} = Wallets.create_wallet(user, %{name: "Open W"})
+      {:ok, closed_w} = Wallets.create_wallet(user, %{name: "Closed W"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_w)
+
+      # 1. Requête / base de données
+      assert length(Wallets.list_wallets_for_user(user.id, "open")) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, "closed")) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, :open)) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, :closed)) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, "all")) == 2
+
+      # 2. Liste en mémoire
+      all_wallets = Wallets.list_wallets_for_user(user.id)
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "open")) == 1
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "closed")) == 1
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "all")) == 2
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "unknown")) == 0
+    end
+  end
 end

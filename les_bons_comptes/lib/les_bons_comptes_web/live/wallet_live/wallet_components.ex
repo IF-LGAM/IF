@@ -1028,6 +1028,263 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     """
   end
 
+  @doc """
+  Barre de filtres par statut pour la liste des porte-monnaies (Épic: Lister les portes-monnaies ouverts / clos).
+  """
+  attr :current_filter, :string, default: "all"
+  attr :counts, :map, default: %{}
+
+  def wallet_status_filter_bar(assigns) do
+    ~H"""
+    <div id="wallet-status-filter-bar" class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+      <button
+        type="button"
+        id="wallet-filter-all"
+        phx-click="filter_wallets"
+        phx-value-status="all"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-full gap-1.5 font-medium transition-all",
+          if(@current_filter in ["all", nil, ""],
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost bg-base-200/70 hover:bg-base-200 text-base-content/80"
+          )
+        ]}
+      >
+        <span>Tous</span>
+        <span class="badge badge-xs sm:badge-sm opacity-80">{Map.get(@counts, "all", 0)}</span>
+      </button>
+
+      <button
+        type="button"
+        id="wallet-filter-open"
+        phx-click="filter_wallets"
+        phx-value-status="open"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-full gap-1.5 font-medium transition-all",
+          if(@current_filter == "open",
+            do: "btn-success text-success-content shadow-sm",
+            else: "btn-ghost bg-base-200/70 hover:bg-base-200 text-base-content/80"
+          )
+        ]}
+      >
+        <.icon name="hero-lock-open" class="size-3.5" />
+        <span>Ouverts</span>
+        <span class="badge badge-xs sm:badge-sm opacity-90">{Map.get(@counts, "open", 0)}</span>
+      </button>
+
+      <button
+        type="button"
+        id="wallet-filter-closed"
+        phx-click="filter_wallets"
+        phx-value-status="closed"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-full gap-1.5 font-medium transition-all",
+          if(@current_filter == "closed",
+            do: "btn-neutral shadow-sm",
+            else: "btn-ghost bg-base-200/70 hover:bg-base-200 text-base-content/80"
+          )
+        ]}
+      >
+        <.icon name="hero-check-badge" class="size-3.5" />
+        <span>Clos</span>
+        <span class="badge badge-xs sm:badge-sm opacity-90">{Map.get(@counts, "closed", 0)}</span>
+      </button>
+
+      <button
+        type="button"
+        id="wallet-filter-pending-settlement"
+        phx-click="filter_wallets"
+        phx-value-status="pending_settlement"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-full gap-1.5 font-medium transition-all",
+          if(@current_filter == "pending_settlement",
+            do: "btn-warning text-warning-content shadow-sm",
+            else: "btn-ghost bg-base-200/70 hover:bg-base-200 text-base-content/80"
+          )
+        ]}
+      >
+        <.icon name="hero-clock" class="size-3.5" />
+        <span>En virement</span>
+        <span class="badge badge-xs sm:badge-sm opacity-90">
+          {Map.get(@counts, "pending_settlement", 0)}
+        </span>
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  État vide pour la liste des porte-monnaies ouverts (US: Gestion des états vides).
+  """
+  def empty_open_wallets_state(assigns) do
+    ~H"""
+    <div
+      id="empty-open-wallets-state"
+      class="card bg-base-100 shadow-xl border border-base-200 rounded-3xl"
+    >
+      <div class="card-body p-10 sm:p-14 text-center space-y-4">
+        <div class="size-16 rounded-2xl bg-success/10 text-success flex items-center justify-center mx-auto shadow-inner">
+          <.icon name="hero-lock-open" class="size-8" />
+        </div>
+
+        <div class="space-y-1.5 max-w-md mx-auto">
+          <h3 class="text-xl font-bold text-base-content">
+            Aucun porte-monnaie ouvert pour le moment
+          </h3>
+          <p class="text-sm text-base-content/60">
+            Vous n'avez aucun compte en phase de dépenses actives. Créez un nouveau porte-monnaie ou réinitialisez vos filtres pour consulter vos comptes clos.
+          </p>
+        </div>
+
+        <div class="pt-2 flex flex-wrap items-center justify-center gap-3">
+          <.link
+            navigate={~p"/wallets/new"}
+            id="create-open-wallet-btn"
+            class="btn btn-primary btn-sm gap-1.5 shadow-sm"
+          >
+            <.icon name="hero-plus" class="size-4" />
+            <span>Créer un nouveau porte-monnaie</span>
+          </.link>
+
+          <button
+            type="button"
+            id="reset-open-wallet-filter-btn"
+            phx-click="filter_wallets"
+            phx-value-status="all"
+            class="btn btn-ghost btn-sm gap-1.5"
+          >
+            <.icon name="hero-arrow-path" class="size-4" />
+            <span>Voir tous les porte-monnaies</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  État vide pour la liste des porte-monnaies clos (US: Gestion des états vides).
+  """
+  def empty_closed_wallets_state(assigns) do
+    ~H"""
+    <div
+      id="empty-closed-wallets-state"
+      class="card bg-base-100 shadow-xl border border-base-200 rounded-3xl"
+    >
+      <div class="card-body p-10 sm:p-14 text-center space-y-4">
+        <div class="size-16 rounded-2xl bg-neutral/10 text-neutral flex items-center justify-center mx-auto shadow-inner">
+          <.icon name="hero-check-badge" class="size-8" />
+        </div>
+
+        <div class="space-y-1.5 max-w-md mx-auto">
+          <h3 class="text-xl font-bold text-base-content">
+            Aucun porte-monnaie clos pour le moment
+          </h3>
+          <p class="text-sm text-base-content/60">
+            Vous n'avez aucun compte archivé ou clôturé. Une fois vos dépenses réglées et les remboursements effectués, vous pourrez clôturer vos porte-monnaies.
+          </p>
+        </div>
+
+        <div class="pt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            id="reset-closed-wallet-filter-btn"
+            phx-click="filter_wallets"
+            phx-value-status="all"
+            class="btn btn-outline btn-primary btn-sm gap-1.5 shadow-sm"
+          >
+            <.icon name="hero-arrow-path" class="size-4" />
+            <span>Voir tous les porte-monnaies</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  État vide générique avec bouton de réinitialisation si le filtre sélectionné ne renvoie aucun porte-monnaie.
+  """
+  attr :filter, :string, default: "all"
+
+  def empty_filtered_wallets_state(assigns) do
+    ~H"""
+    <div
+      id="empty-filtered-wallets-state"
+      class="card bg-base-100 shadow-xl border border-base-200 rounded-3xl"
+    >
+      <div class="card-body p-10 sm:p-14 text-center space-y-4">
+        <div class="size-16 rounded-2xl bg-base-200 text-base-content/70 flex items-center justify-center mx-auto">
+          <.icon name="hero-funnel" class="size-8" />
+        </div>
+
+        <div class="space-y-1.5 max-w-md mx-auto">
+          <h3 class="text-xl font-bold text-base-content">
+            Aucun résultat pour ce filtre
+          </h3>
+          <p class="text-sm text-base-content/60">
+            Aucun de vos porte-monnaies ne correspond au statut sélectionné.
+          </p>
+        </div>
+
+        <div class="pt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            id="reset-wallet-filter-btn"
+            phx-click="filter_wallets"
+            phx-value-status="all"
+            class="btn btn-primary btn-sm gap-1.5"
+          >
+            <.icon name="hero-arrow-path" class="size-4" />
+            <span>Réinitialiser les filtres</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  État d'erreur pour le chargement des porte-monnaies (US: Gestion des erreurs de chargement).
+  """
+  attr :error_message, :string,
+    default: "Une erreur est survenue lors de la récupération des porte-monnaies."
+
+  def wallets_error_state(assigns) do
+    ~H"""
+    <div
+      id="wallets-error-state"
+      class="card bg-error/10 border-2 border-error/30 text-error-content shadow-lg rounded-2xl p-6 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="size-10 rounded-xl bg-error text-error-content flex items-center justify-center shrink-0 shadow-sm">
+          <.icon name="hero-exclamation-triangle" class="size-6 text-white" />
+        </div>
+        <div class="space-y-1 flex-1">
+          <h3 class="text-base font-bold text-error">
+            Erreur de chargement des porte-monnaies
+          </h3>
+          <p class="text-xs text-base-content/80">
+            {@error_message}
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-error/20">
+        <button
+          type="button"
+          id="retry-load-wallets-btn"
+          phx-click="retry_load_wallets"
+          class="btn btn-error btn-sm text-white gap-2 shadow-sm"
+        >
+          <.icon name="hero-arrow-path" class="size-4" />
+          <span>Réessayer</span>
+        </button>
+      </div>
+    </div>
+    """
+  end
+
   def format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%d/%m/%Y")
   def format_date(%NaiveDateTime{} = ndt), do: Calendar.strftime(ndt, "%d/%m/%Y")
   def format_date(_), do: ""
