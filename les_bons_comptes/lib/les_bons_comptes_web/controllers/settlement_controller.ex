@@ -5,7 +5,7 @@ defmodule LesBonsComptesWeb.SettlementController do
   alias LesBonsComptes.Wallets
 
   @doc """
-  Expose l'algorithme de remboursement optimisé pour un porte-monnaie via l'API REST (IF-84).
+  Exposes the optimized settlement algorithm for a wallet via REST API (IF-84).
   """
   def index(conn, %{"id" => id}) do
     case parse_wallet_id(id) do
@@ -49,7 +49,7 @@ defmodule LesBonsComptesWeb.SettlementController do
   end
 
   @doc """
-  Expose une action de remboursement mock pour un porte-monnaie clos (IF-85).
+  Exposes a mock settlement action for a closed wallet (IF-85).
   POST /api/wallets/:id/settlements/mock
   """
   def mock(conn, %{"id" => id} = params) do

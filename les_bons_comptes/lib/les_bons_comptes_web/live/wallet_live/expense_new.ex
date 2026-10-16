@@ -1,8 +1,8 @@
 defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
   @moduledoc """
-  LiveView pour déclarer une nouvelle dépense dans un porte-monnaie (IF-62).
-  Permet à chaque membre de créer une dépense qui lui est directement affectée par défaut (IF-68, IF-70),
-  avec validation en direct des champs (IF-67, IF-69) et confirmation de création (IF-71).
+  LiveView for declaring a new expense in a wallet (IF-62).
+  Allows each member to create an expense directly attributed to them by default (IF-68, IF-70),
+  with live form validation (IF-67, IF-69) and creation confirmation (IF-71).
   """
   use LesBonsComptesWeb, :live_view
 
@@ -16,7 +16,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
     current_user = socket.assigns.current_user
     wallet = Wallets.get_wallet!(wallet_id)
 
-    # Vérification d'autorisation : l'utilisateur doit être membre ou propriétaire
+    # Authorization check: user must be a member or owner
     current_member = Enum.find(wallet.members, &(&1.user_id == current_user.id))
 
     if is_nil(current_member) do
@@ -28,7 +28,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
        )
        |> push_navigate(to: ~p"/wallets")}
     else
-      # Compte dépenseur pré-sélectionné : le membre connecté lui-même (IF-68, IF-70)
+      # Pre-selected payer account: logged-in member themselves (IF-68, IF-70)
       default_attrs = %{
         "payer_id" => current_member.id,
         "date" => Date.to_iso8601(Date.utc_today()),
@@ -63,7 +63,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
 
   @impl true
   def handle_event("validate", %{"expense" => expense_params}, socket) do
-    # Conserve le wallet_id et currency dans la validation
+    # Preserve wallet_id and currency in validation
     wallet = socket.assigns.wallet
 
     params =
@@ -86,7 +86,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
 
     case Expenses.create_expense(current_user, wallet, expense_params) do
       {:ok, expense} ->
-        # Confirmation de déclaration de la dépense (IF-71)
+        # Expense declaration confirmation (IF-71)
         amount_formatted = WalletComponents.format_amount(expense.amount)
 
         {:noreply,
@@ -116,7 +116,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-2xl mx-auto space-y-6">
-        <%!-- Fil d'Ariane & Bouton retour --%>
+        <%!-- Breadcrumb & back button --%>
         <div class="flex items-center justify-between">
           <.link
             navigate={~p"/wallets/#{@wallet.id}"}
@@ -131,7 +131,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
           </span>
         </div>
 
-        <%!-- En-tête de la page (IF-65) --%>
+        <%!-- Page Header (IF-65) --%>
         <div class="space-y-1">
           <h1 class="text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-2">
             <.icon name="hero-banknotes" class="size-8 text-primary" />
@@ -142,7 +142,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
           </p>
         </div>
 
-        <%!-- Formulaire de déclaration (IF-65, IF-67, IF-68) --%>
+        <%!-- Declaration Form (IF-65, IF-67, IF-68) --%>
         <div class="card bg-base-100 shadow-xl border border-base-200">
           <div class="card-body p-6 sm:p-8">
             <.form
@@ -152,7 +152,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
               phx-submit="save"
               class="space-y-6"
             >
-              <%!-- Titre de la dépense --%>
+              <%!-- Expense Title --%>
               <.input
                 field={@form[:title]}
                 id="expense-title-input"
@@ -162,7 +162,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
                 required
               />
 
-              <%!-- Montant et Devise --%>
+              <%!-- Amount and Currency --%>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <.input
@@ -177,7 +177,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
                   />
                 </div>
 
-                <%!-- Date de la dépense --%>
+                <%!-- Expense Date --%>
                 <div>
                   <.input
                     field={@form[:date]}
@@ -190,7 +190,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
                 </div>
               </div>
 
-              <%!-- Sélection du compte dépenseur (IF-68, IF-70) --%>
+              <%!-- Payer selection (IF-68, IF-70) --%>
               <div class="bg-base-200/40 rounded-xl p-4 border border-base-200 space-y-3">
                 <div class="flex items-center justify-between">
                   <label
@@ -217,7 +217,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
                 </p>
               </div>
 
-              <%!-- Description / Notes optionnelles --%>
+              <%!-- Description / Optional notes --%>
               <.input
                 field={@form[:description]}
                 id="expense-description-input"
@@ -226,7 +226,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseNew do
                 placeholder="Ex : Ticket de caisse partagé avec le groupe"
               />
 
-              <%!-- Boutons d'action --%>
+              <%!-- Action buttons --%>
               <div class="divider my-2"></div>
 
               <div class="flex items-center justify-end gap-3 pt-2">

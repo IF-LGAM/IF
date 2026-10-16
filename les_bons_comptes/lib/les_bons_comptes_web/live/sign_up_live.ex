@@ -33,7 +33,7 @@ defmodule LesBonsComptesWeb.SignUpLive do
   def handle_event("save", %{"user" => user_params}, socket) do
     case Accounts.create_user(user_params) do
       {:ok, user} ->
-        # Génération du token sécurisé et initialisation immédiate de la session (IF-27)
+        # Generate secure token and initialize session immediately (IF-27)
         token = UserAuth.sign_user_token(user.id)
 
         {:noreply,
@@ -74,7 +74,7 @@ defmodule LesBonsComptesWeb.SignUpLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} show_sign_in={false}>
       <div class="max-w-xl mx-auto space-y-6">
-        <%!-- En-tête de la page --%>
+        <%!-- Page Header --%>
         <div class="text-center space-y-2">
           <div class="inline-flex items-center justify-center size-14 rounded-2xl bg-primary/10 text-primary mb-2 shadow-sm">
             <.icon name="hero-user-plus" class="size-7" />
@@ -87,7 +87,7 @@ defmodule LesBonsComptesWeb.SignUpLive do
           </p>
         </div>
 
-        <%!-- Carte Formulaire d'inscription --%>
+        <%!-- Sign up form card --%>
         <div class="card bg-base-100 shadow-xl border border-base-200">
           <div class="card-body p-6 sm:p-8">
             <.form

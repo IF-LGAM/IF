@@ -1,8 +1,8 @@
 defmodule LesBonsComptes.Wallets do
   @moduledoc """
-  Contexte métier pour la gestion des porte-monnaies communs (Wallets / Tricounts).
-  Gère la création du porte-monnaie, l'association des participants, l'initialisation
-  des droits (propriétaire) et les validations métier associées.
+  Business context for shared wallet management (Wallets / Tricounts).
+  Handles wallet creation, participant association,
+  permissions initialization (owner), and associated business validations.
   """
 
   import Ecto.Query, warn: false
@@ -11,10 +11,10 @@ defmodule LesBonsComptes.Wallets do
   alias LesBonsComptes.Wallets.{Invitations, Members, Wallet, WalletInvitation, WalletMember}
 
   # ---------------------------------------------------------------------------
-  # Délégations vers Members et Invitations
+  # Delegations to Members and Invitations
   # ---------------------------------------------------------------------------
 
-  # Membres et permissions (IF-30, IF-36, IF-38, IF-39)
+  # Members and permissions (IF-30, IF-36, IF-38, IF-39)
   defdelegate owner?(wallet, user), to: Members
   defdelegate add_member(wallet, attrs), to: Members, as: :add
   defdelegate add_member(user, wallet, attrs), to: Members, as: :add
@@ -38,7 +38,7 @@ defmodule LesBonsComptes.Wallets do
   defdelegate decline_invitation(user, invitation_or_id), to: Invitations, as: :decline
   defdelegate cancel_invitation(user, invitation_id), to: Invitations, as: :cancel
 
-  # Récupération et filtrage des portes-monnaies invités (Epic)
+  # Invited wallets retrieval and filtering (Epic)
   defdelegate list_invited_wallets_for_user(user_or_id, status \\ nil), to: Invitations
 
   defdelegate list_invited_wallets(user_or_id, status \\ nil),
@@ -52,7 +52,7 @@ defmodule LesBonsComptes.Wallets do
     to: Invitations,
     as: :list_for_user
 
-  # Données nécessaires au calcul des soldes, comptes créditeurs, débiteurs et règlements
+  # Balance computation, creditor/debtor accounts, and settlement data
   defdelegate get_balance_data(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate fetch_balance_data(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate calculate_balances(wallet_or_id), to: LesBonsComptes.Expenses
@@ -77,9 +77,9 @@ defmodule LesBonsComptes.Wallets do
   defdelegate list_settled_transfers(wallet_id), to: LesBonsComptes.Expenses
 
   @doc """
-  Retourne tous les porte-monnaies auxquels l'utilisateur participe
-  (soit comme créateur, soit comme membre enregistré).
-  Permet de filtrer optionnellement par statut ("open", "closed", "pending_settlement", "all").
+  Returns all wallets the user participates in
+  (either as creator or as an enrolled member).
+  Optionally filters by status ("open", "closed", "pending_settlement", "all").
   """
   def list_wallets_for_user(user_or_id, status \\ nil)
 
@@ -102,8 +102,8 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Récupère les porte-monnaies d'un utilisateur sous forme de tuple {:ok, wallets} ou {:error, reason}
-  pour une gestion robuste des erreurs de chargement (US: Gestion des erreurs de chargement).
+  Retrieves wallets for a user as an `{:ok, wallets}` or `{:error, reason}` tuple
+  for robust loading error handling.
   """
   def fetch_wallets_for_user(user_or_id, status \\ nil) do
     try do
@@ -114,36 +114,36 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Récupère uniquement les porte-monnaies ouverts d'un utilisateur (US: Récupération des portes-monnaies ouverts).
+  Retrieves only open wallets for a user.
   """
   def list_open_wallets_for_user(user_or_id) do
     list_wallets_for_user(user_or_id, "open")
   end
 
   @doc """
-  Récupère les porte-monnaies ouverts sous forme de résultat {:ok, wallets} ou {:error, reason}.
+  Retrieves open wallets as an `{:ok, wallets}` or `{:error, reason}` result.
   """
   def fetch_open_wallets(user_or_id) do
     fetch_wallets_for_user(user_or_id, "open")
   end
 
   @doc """
-  Récupère uniquement les porte-monnaies clos d'un utilisateur (US: Récupération des portes-monnaies clos).
+  Retrieves only closed wallets for a user.
   """
   def list_closed_wallets_for_user(user_or_id) do
     list_wallets_for_user(user_or_id, "closed")
   end
 
   @doc """
-  Récupère les porte-monnaies clos sous forme de résultat {:ok, wallets} ou {:error, reason}.
+  Retrieves closed wallets as an `{:ok, wallets}` or `{:error, reason}` result.
   """
   def fetch_closed_wallets(user_or_id) do
     fetch_wallets_for_user(user_or_id, "closed")
   end
 
   @doc """
-  Filtre une requête ou une liste de porte-monnaies par statut (US: Filtrage par statut).
-  Accepte 'all', 'open', 'closed', 'pending_settlement', 'active' (atome ou chaîne).
+  Filters a wallet query or list by status.
+  Accepts 'all', 'open', 'closed', 'pending_settlement', 'active' (atom or string).
   """
   def filter_wallets_by_status(query_or_list, status)
 
@@ -188,7 +188,7 @@ defmodule LesBonsComptes.Wallets do
   defp normalize_wallet_status(_), do: :ignore
 
   @doc """
-  Récupère un porte-monnaie par son ID avec ses membres, ses invitations et son créateur. Lève si introuvable.
+  Retrieves a wallet by ID with its members, invitations, and creator. Raises if not found.
   """
   def get_wallet!(id) do
     Wallet
@@ -211,7 +211,7 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Récupère un porte-monnaie par son ID. Retourne nil si introuvable.
+  Retrieves a wallet by ID. Returns nil if not found.
   """
   def get_wallet(id) do
     case Repo.get(Wallet, id) do
@@ -224,24 +224,24 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Initialise un changeset pour un nouveau porte-monnaie.
+  Initializes a changeset for a new wallet.
   """
   def change_wallet(%Wallet{} = wallet, attrs \\ %{}) do
     Wallet.changeset(wallet, attrs)
   end
 
   @doc """
-  Crée un porte-monnaie commun (IF-31), valide ses données (IF-32),
-  initialise le propriétaire avec ses droits "owner" (IF-36)
-  et associe les membres/participants supplémentaires (IF-30).
+  Creates a shared wallet (IF-31), validates its data (IF-32),
+  initializes the creator with "owner" rights (IF-36),
+  and associates additional members/participants (IF-30).
 
-  L'opération est transactionnelle via `Ecto.Multi`.
-  Si une donnée est invalide, la transaction est annulée.
+  The operation is transactional via `Ecto.Multi`.
+  If any data is invalid, the transaction is rolled back.
 
-  ## Paramètres
-  - `creator`: Le `%User{}` connecté qui crée le porte-monnaie.
-  - `wallet_attrs`: Les attributs du porte-monnaie (`name`, `description`, `currency`).
-  - `participants`: Liste de maps pour les autres membres, ex:
+  ## Parameters
+  - `creator`: The authenticated `%User{}` creating the wallet.
+  - `wallet_attrs`: Wallet attributes (`name`, `description`, `currency`).
+  - `participants`: List of maps for other members, e.g.:
     `[%{name: "Alice", email: "alice@example.com", user_id: 2}, %{name: "Bob"}]`
   """
   def create_wallet(%User{} = creator, wallet_attrs, participants \\ []) do
@@ -288,8 +288,8 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Met à jour un porte-monnaie avec vérification que l'utilisateur est bien le propriétaire.
-  Rejette avec `{:error, :wallet_closed}` si le porte-monnaie n'est plus en phase de déclaration ("open").
+  Updates a wallet after checking that the user is the owner.
+  Rejects with `{:error, :wallet_closed}` if the wallet is no longer in the declaration stage ("open").
   """
   def update_wallet(%User{} = user, %Wallet{} = wallet, attrs) do
     cond do
@@ -305,8 +305,8 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Met à jour les attributs d'un porte-monnaie.
-  Rejette les modifications de contenu si le porte-monnaie n'est plus en phase de déclaration ("open").
+  Updates attributes of a wallet.
+  Rejects content updates if the wallet is no longer in the declaration stage ("open").
   """
   def update_wallet(%Wallet{} = wallet, attrs) do
     has_content_updates =
@@ -324,7 +324,7 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Supprime un porte-monnaie avec vérification que l'utilisateur est bien le propriétaire.
+  Deletes a wallet after checking that the user is the owner.
   """
   def delete_wallet(%User{} = user, %Wallet{} = wallet) do
     if owner?(wallet, user) do
@@ -335,15 +335,15 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Supprime un porte-monnaie de la base de données.
+  Deletes a wallet from the database.
   """
   def delete_wallet(%Wallet{} = wallet) do
     Repo.delete(wallet)
   end
 
   @doc """
-  Valide les comptes d'un porte-monnaie et fige les dépenses pour passer à l'attente des virements (Étape 2).
-  Seul le propriétaire peut valider le groupe.
+  Validates wallet accounts and freezes expenses to proceed to pending settlements (Step 2).
+  Only the owner can validate the group.
   """
   def validate_wallet(%User{} = user, %Wallet{} = wallet) do
     if owner?(wallet, user) do
@@ -354,14 +354,14 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Valide un porte-monnaie en passant son statut à "pending_settlement".
+  Validates a wallet by updating its status to "pending_settlement".
   """
   def validate_wallet(%Wallet{} = wallet) do
     update_wallet(wallet, %{status: "pending_settlement"})
   end
 
   @doc """
-  Clôture un porte-monnaie (Étape 3 : Clôturé). Seul le propriétaire peut clore le groupe.
+  Closes a wallet (Step 3: Closed). Only the owner can close the group.
   """
   def close_wallet(%User{} = user, %Wallet{} = wallet) do
     if owner?(wallet, user) do
@@ -372,8 +372,8 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Clôture un porte-monnaie en passant son statut à "closed".
-  Supprime également toutes les invitations existantes pour ce porte-monnaie.
+  Closes a wallet by updating its status to "closed".
+  Also removes all existing invitations for this wallet.
   """
   def close_wallet(%Wallet{} = wallet) do
     Repo.delete_all(from i in WalletInvitation, where: i.wallet_id == ^wallet.id)
@@ -381,9 +381,9 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Rouvre un porte-monnaie validé pour modifications (Étape 1 : Déclarations).
-  Seul le propriétaire peut rouvrir le groupe.
-  La clôture étant définitive, un porte-monnaie clos ne peut jamais être rouvert ({:error, :closure_is_final}).
+  Reopens a validated wallet for edits (Step 1: Declarations).
+  Only the owner can reopen the group.
+  Closure being permanent, a closed wallet can never be reopened ({:error, :closure_is_final}).
   """
   def reopen_wallet(%User{} = user, %Wallet{} = wallet) do
     cond do
@@ -399,8 +399,8 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Rouvre un porte-monnaie en repassant son statut à "open".
-  Échoue si le porte-monnaie est déjà clos.
+  Reopens a wallet by setting its status back to "open".
+  Fails if the wallet is already closed.
   """
   def reopen_wallet(%Wallet{} = wallet) do
     if wallet.status == "closed" do
@@ -411,37 +411,37 @@ defmodule LesBonsComptes.Wallets do
   end
 
   @doc """
-  Indique si le porte-monnaie est clos.
+  Indicates whether the wallet is closed.
   """
   def closed?(%Wallet{} = wallet), do: Wallet.closed?(wallet)
   def closed?(_), do: false
 
   @doc """
-  Indique si le porte-monnaie est en attente de virements.
+  Indicates whether the wallet is pending settlement.
   """
   def pending_settlement?(%Wallet{} = wallet), do: Wallet.pending_settlement?(wallet)
   def pending_settlement?(_), do: false
 
   @doc """
-  Indique si le porte-monnaie est ouvert aux déclarations.
+  Indicates whether the wallet is open for declarations.
   """
   def open?(%Wallet{} = wallet), do: Wallet.open?(wallet)
   def open?(_), do: false
 
   @doc """
-  Retourne le numéro d'étape actuel (1, 2 ou 3).
+  Returns the current step number (1, 2, or 3).
   """
   def step_number(%Wallet{} = wallet), do: Wallet.step_number(wallet)
   def step_number(_), do: 1
 
   @doc """
-  Retourne le libellé de l'étape actuelle.
+  Returns the current step label.
   """
   def status_label(%Wallet{} = wallet), do: Wallet.status_label(wallet)
   def status_label(_), do: "Déclarations en cours"
 
   @doc """
-  Indique si le porte-monnaie peut être rouvert.
+  Indicates whether the wallet can be reopened.
   """
   def reopenable?(%Wallet{} = wallet), do: Wallet.reopenable?(wallet)
   def reopenable?(_), do: false

@@ -50,7 +50,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert expense.created_by_id == creator.id
       assert expense.date == Date.utc_today()
 
-      # Directement affectée au compte dépenseur du créateur
+      # Directly assigned to the creator's spending account
       [owner_member | _] = wallet.members
       assert expense.payer_id == owner_member.id
       assert expense.payer.name == "Alice"
@@ -167,7 +167,7 @@ defmodule LesBonsComptes.ExpensesTest do
       expenses = Expenses.list_expenses_for_wallet(wallet.id)
       assert length(expenses) == 2
 
-      # Triées par date décroissante
+      # Sorted in descending order of date
       [first, second] = expenses
       assert first.title == "Course 2"
       assert second.title == "Course 1"
@@ -204,7 +204,7 @@ defmodule LesBonsComptes.ExpensesTest do
       %{creator: creator, bob: bob, wallet: wallet} = setup_wallet_with_members()
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
 
-      # Le créateur Alice crée la dépense pour le compte dépenseur de Bob
+      # Creator Alice creates the expense for Bob's spending account
       {:ok, expense} =
         Expenses.create_expense(creator, wallet, %{
           title: "Cadeau",
@@ -229,11 +229,11 @@ defmodule LesBonsComptes.ExpensesTest do
 
       wallet = Wallets.get_wallet!(wallet.id)
 
-      # Alice crée une dépense
+      # Alice creates an expense
       {:ok, expense} =
         Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "60.00"})
 
-      # Charlie tente de la supprimer
+      # Charlie attempts to delete it
       refute Expenses.can_delete_expense?(charlie_user, expense)
       assert {:error, :unauthorized} = Expenses.delete_expense(charlie_user, expense)
     end
@@ -244,14 +244,14 @@ defmodule LesBonsComptes.ExpensesTest do
       {:ok, expense} =
         Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
 
-      # Étape 2 : en attente de virements
+      # Step 2: awaiting transfers
       {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
       expense_pending = Expenses.get_expense!(expense.id)
 
       refute Expenses.can_delete_expense?(creator, expense_pending)
       assert {:error, :wallet_closed} = Expenses.delete_expense(creator, expense_pending)
 
-      # Étape 3 : clos
+      # Step 3: closed
       {:ok, _closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
       expense_closed = Expenses.get_expense!(expense.id)
 
@@ -365,8 +365,8 @@ defmodule LesBonsComptes.ExpensesTest do
           amount: "100.00"
         })
 
-      # Alice a payé 100€, Bob 0€. Total = 100€, part par membre = 50€
-      # Alice doit recevoir 50€
+      # Alice paid €100, Bob €0. Total = €100, share per member = €50
+      # Alice should receive €50
       assert [creditor] = Expenses.calculate_creditors(wallet)
 
       assert creditor.name == "Alice"
@@ -392,12 +392,12 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "David", email: david.email, user_id: david.id}
         ])
 
-      # Total = 80 + 40 + 60 + 20 = 200€
-      # Nombre de membres = 4 -> part équitable = 50€
-      # Alice paie : 80 + 40 = 120€ -> balance = +70€ (créditeur 1)
-      # Bob paie : 60€ -> balance = +10€ (créditeur 2)
-      # Charlie paie : 20€ -> balance = -30€ (débiteur)
-      # David paie : 0€ -> balance = -50€ (débiteur)
+      # Total = 80 + 40 + 60 + 20 = €200
+      # Number of members = 4 -> fair share = €50
+      # Alice pays: 80 + 40 = €120 -> balance = +€70 (creditor 1)
+      # Bob pays: €60 -> balance = +€10 (creditor 2)
+      # Charlie pays: €20 -> balance = -€30 (debtor)
+      # David pays: €0 -> balance = -€50 (debtor)
 
       {:ok, _e1} =
         Expenses.create_expense(creator, wallet, %{title: "Location", amount: "80.00"})
@@ -416,7 +416,7 @@ defmodule LesBonsComptes.ExpensesTest do
 
       [first, second] = creditors
 
-      # Trié par montant à recevoir décroissant
+      # Sorted by amount to receive in descending order
       assert first.name == "Alice"
       assert Decimal.equal?(first.amount_to_receive, Decimal.new("70.00"))
       assert Decimal.equal?(first.total_paid, Decimal.new("120.00"))
@@ -437,7 +437,7 @@ defmodule LesBonsComptes.ExpensesTest do
       {:ok, _e2} =
         Expenses.create_expense(bob, wallet, %{title: "Billet train B", amount: "50.00"})
 
-      # Total = 100€, 2 membres -> part = 50€ chacun -> soldes = 0€
+      # Total = €100, 2 members -> share = €50 each -> balances = €0
       assert Expenses.calculate_creditors(wallet) == []
     end
 
@@ -452,8 +452,8 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # 100€ payés par Alice, part = 100 / 3 = 33.33€
-      # Alice doit recevoir 100 - 33.33 = 66.67€
+      # €100 paid by Alice, share = 100 / 3 = €33.33
+      # Alice should receive 100 - 33.33 = €66.67
       {:ok, _exp} =
         Expenses.create_expense(creator, wallet, %{title: "Dîner", amount: "100.00"})
 
@@ -533,7 +533,7 @@ defmodule LesBonsComptes.ExpensesTest do
       {:ok, _e3} =
         Expenses.create_expense(bob, wallet, %{title: "Hôtel", amount: "50.00"})
 
-      # Données récupérées
+      # Retrieved data
       data = Expenses.get_balance_data(wallet)
 
       assert is_map(data)
@@ -545,7 +545,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Expenses.count_expenses_for_wallet(wallet.id) == 3
       assert Decimal.equal?(data.total_expenses, Decimal.new("150.00"))
 
-      # Vérification des cumuls par participant
+      # Verify totals per participant
       assert Decimal.equal?(
                Map.get(data.expenses_by_member, alice_member.id),
                Decimal.new("100.00")
@@ -554,7 +554,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Decimal.equal?(Map.get(data.expenses_by_member, bob_member.id), Decimal.new("50.00"))
       assert Map.get(data.expenses_by_member, charlie_member.id) == nil
 
-      # fetch_balance_data/1 retourne {:ok, data}
+      # fetch_balance_data/1 returns {:ok, data}
       assert {:ok, fetch_data} = Expenses.fetch_balance_data(wallet)
       assert fetch_data == data
     end
@@ -642,9 +642,9 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # Alice paie 90€, Bob paie 0€, Charlie paie 0€
-      # Total = 90€, part = 30€ chacun
-      # Bob doit régler 30€, Charlie doit régler 30€, Alice est créditrice (60€)
+      # Alice pays €90, Bob pays €0, Charlie pays €0
+      # Total = €90, share = €30 each
+      # Bob must pay €30, Charlie must pay €30, Alice is creditor (€60)
       {:ok, _exp} =
         Expenses.create_expense(creator, wallet, %{title: "Hébergement", amount: "90.00"})
 
@@ -660,7 +660,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert Decimal.equal?(bob_debtor.amount, Decimal.new("30.00"))
       assert bob_debtor.type == :debtor
 
-      # Alice ne figure pas dans les débiteurs
+      # Alice is not listed among debtors
       refute Enum.any?(debtors, &(&1.name == "Alice"))
     end
 
@@ -675,10 +675,10 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # Total 120€, part = 40€
-      # Alice paie 100€ (balance = +60€)
-      # Bob paie 20€ (balance = -20€)
-      # Charlie paie 0€ (balance = -40€)
+      # Total €120, share = €40
+      # Alice pays €100 (balance = +€60)
+      # Bob pays €20 (balance = -€20)
+      # Charlie pays €0 (balance = -€40)
       {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 1", amount: "100.00"})
       {:ok, _} = Expenses.create_expense(bob, wallet, %{title: "Dépense 2", amount: "20.00"})
 
@@ -717,7 +717,7 @@ defmodule LesBonsComptes.ExpensesTest do
     test "cas simple 2 personnes : 1 dépense engendre exactement 1 virement direct" do
       %{creator: creator, bob: _bob, wallet: wallet} = setup_wallet_with_members()
 
-      # Alice paie 80€ pour Alice et Bob -> Bob doit virer 40€ à Alice
+      # Alice pays €80 for Alice and Bob -> Bob must transfer €40 to Alice
       {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "80.00"})
 
       settlements = Expenses.calculate_settlements(wallet)
@@ -741,7 +741,7 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # Alice paie 90€ -> part 30€ chacun
+      # Alice pays €90 -> share of €30 each
       {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Location", amount: "90.00"})
 
       settlements = Expenses.calculate_settlements(wallet)
@@ -771,8 +771,8 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "David", email: david.email, user_id: david.id}
         ])
 
-      # Alice paie 80€, Bob paie 40€, Charlie 0€, David 0€
-      # Total = 120€, part = 30€ chacun
+      # Alice pays €80, Bob pays €40, Charlie €0, David €0
+      # Total = €120, share = €30 each
       {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 1", amount: "80.00"})
       {:ok, _} = Expenses.create_expense(bob, wallet, %{title: "Dépense 2", amount: "40.00"})
 
@@ -840,7 +840,7 @@ defmodule LesBonsComptes.ExpensesTest do
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
 
-      # Étape 2 : validé
+      # Step 2: validated
       {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
 
       assert {:ok, pending_res} =
@@ -854,7 +854,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert pending_res.status == "settled"
       assert pending_res.settled == true
 
-      # Étape 3 : clos
+      # Step 3: closed
       {:ok, closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
 
       assert {:ok, mock_res} =
@@ -875,7 +875,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert mock_res.currency == "EUR"
       assert %DateTime{} = mock_res.settled_at
 
-      # Fonctionne aussi par ID et via la map
+      # Also works by ID and via map
       assert {:ok, _} =
                Expenses.mock_settle_transfer(closed_wallet.id, %{
                  "from_id" => bob_member.id,
@@ -890,7 +890,7 @@ defmodule LesBonsComptes.ExpensesTest do
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
       {:ok, closed_wallet} = Wallets.close_wallet(creator, wallet)
 
-      # Même membre
+      # Same member
       assert {:error, :identical_members} =
                Expenses.mock_settle_transfer(
                  closed_wallet,
@@ -899,11 +899,11 @@ defmodule LesBonsComptes.ExpensesTest do
                  "10.00"
                )
 
-      # Membre inexistant
+      # Non-existent member
       assert {:error, :member_not_found} =
                Expenses.mock_settle_transfer(closed_wallet, 999_999, alice_member.id, "10.00")
 
-      # Montant invalide ou négatif
+      # Invalid or negative amount
       assert {:error, :invalid_amount} =
                Expenses.mock_settle_transfer(
                  closed_wallet,
@@ -934,13 +934,13 @@ defmodule LesBonsComptes.ExpensesTest do
 
       {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 90", amount: "90.00"})
 
-      # Rejeté si ouvert
+      # Rejected if open
       assert {:error, :wallet_not_closed} = Expenses.mock_settle_all(wallet)
 
-      # Validation du porte-monnaie (Étape 2)
+      # Wallet validation (Step 2)
       {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
 
-      # Succès : tous les virements sont réglés et le porte-monnaie est automatiquement clôturé
+      # Success: all settlements are settled and wallet is automatically closed
       assert {:ok, simulated_list} = Expenses.mock_settle_all(pending_wallet)
       assert length(simulated_list) == 2
 
@@ -951,7 +951,7 @@ defmodule LesBonsComptes.ExpensesTest do
         assert Decimal.equal?(s.amount, Decimal.new("30.00"))
       end)
 
-      # Vérification de la clôture automatique en base
+      # Verify automatic closure in database
       reloaded_wallet = Wallets.get_wallet!(wallet.id)
       assert reloaded_wallet.status == "closed"
       assert Wallets.closed?(reloaded_wallet)
@@ -968,7 +968,7 @@ defmodule LesBonsComptes.ExpensesTest do
           %{name: "Bob", email: bob.email, user_id: bob.id}
         ])
 
-      # Invitation en attente pour tester la suppression à la clôture
+      # Pending invitation to test deletion upon closure
       dave = create_user(%{name: "Dave", email: "dave_settle@test.com"})
       {:ok, _invitation} = Wallets.create_invitation(creator, wallet, %{email: dave.email})
 
@@ -978,14 +978,14 @@ defmodule LesBonsComptes.ExpensesTest do
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
 
-      # Rejeté si ouvert
+      # Rejected if open
       assert {:error, :wallet_not_in_settlement} =
                Expenses.settle_transfer(bob, wallet, bob_member.id, alice_member.id, "50.00")
 
       # Validation
       {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
 
-      # Alice (la créancière) ne peut pas effectuer le virement de Bob
+      # Alice (creditor) cannot perform Bob's transfer
       assert {:error, :unauthorized} =
                Expenses.settle_transfer(
                  creator,
@@ -995,7 +995,7 @@ defmodule LesBonsComptes.ExpensesTest do
                  "50.00"
                )
 
-      # Bob (le débiteur) effectue son virement
+      # Bob (debtor) performs his transfer
       assert {:ok, res} =
                Expenses.settle_transfer(
                  bob,
@@ -1009,7 +1009,7 @@ defmodule LesBonsComptes.ExpensesTest do
       assert res.settled == true
       assert Decimal.equal?(res.amount, Decimal.new("50.00"))
 
-      # Persistance en base vérifiée via list_settled_transfers
+      # Database persistence verified via list_settled_transfers
       settled_records = Expenses.list_settled_transfers(wallet.id)
       assert length(settled_records) == 1
       [s] = settled_records
@@ -1017,11 +1017,11 @@ defmodule LesBonsComptes.ExpensesTest do
       assert s.to_id == alice_member.id
       assert Decimal.equal?(s.amount, Decimal.new("50.00"))
 
-      # Comme c'était l'unique virement, le porte-monnaie s'est clôturé automatiquement
+      # As it was the only transfer, wallet automatically closed
       reloaded_wallet = Wallets.get_wallet!(wallet.id)
       assert reloaded_wallet.status == "closed"
 
-      # Et les invitations existantes ont été supprimées
+      # And existing invitations were deleted
       assert Wallets.list_pending_invitations_for_wallet(wallet.id) == []
     end
   end

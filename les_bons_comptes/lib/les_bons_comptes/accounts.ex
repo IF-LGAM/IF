@@ -1,7 +1,7 @@
 defmodule LesBonsComptes.Accounts do
   @moduledoc """
-  Contexte métier pour la gestion des comptes utilisateurs (Accounts).
-  Centralise les interactions avec la base de données pour l'entité User.
+  Business context for user account management (Accounts).
+  Centralizes database interactions for the User entity.
   """
 
   import Ecto.Query, warn: false
@@ -9,32 +9,32 @@ defmodule LesBonsComptes.Accounts do
   alias LesBonsComptes.Accounts.User
 
   @doc """
-  Retourne la liste de tous les utilisateurs enregistrés en base.
+  Returns the list of all registered users in the database.
   """
   def list_users do
     Repo.all(from u in User, order_by: [desc: u.inserted_at])
   end
 
   @doc """
-  Récupère un utilisateur via son identifiant ID. Lève une erreur si introuvable.
+  Fetches a single user by ID. Raises if the user does not exist.
   """
   def get_user!(id), do: Repo.get!(User, id)
 
   @doc """
-  Récupère un utilisateur via son identifiant ID. Retourne nil si introuvable.
+  Fetches a single user by ID. Returns nil if the user does not exist.
   """
   def get_user(id), do: Repo.get(User, id)
 
   @doc """
-  Récupère un utilisateur via son adresse email.
+  Fetches a single user by email address.
   """
   def get_user_by_email(email) when is_binary(email) do
     Repo.get_by(User, email: email)
   end
 
   @doc """
-  Authentifie un utilisateur avec son email et mot de passe en clair.
-  Retourne `{:ok, user}` si le mot de passe correspond, ou `{:error, :unauthorized}` sinon.
+  Authenticates a user with email and plain password.
+  Returns `{:ok, user}` if the password matches, or `{:error, :unauthorized}` otherwise.
   """
   def authenticate_user(email, password) when is_binary(email) and is_binary(password) do
     user = Repo.get_by(User, email: email)
@@ -47,8 +47,8 @@ defmodule LesBonsComptes.Accounts do
   end
 
   @doc """
-  Crée un utilisateur en base à partir des attributs donnés.
-  Retourne `{:ok, %User{}}` en cas de succès ou `{:error, %Ecto.Changeset{}}` si la validation échoue.
+  Creates a user in the database with the given attributes.
+  Returns `{:ok, %User{}}` on success or `{:error, %Ecto.Changeset{}}` if validation fails.
   """
   def create_user(attrs \\ %{}) do
     %User{}
@@ -57,7 +57,7 @@ defmodule LesBonsComptes.Accounts do
   end
 
   @doc """
-  Génère un changeset pour pré-remplir ou valider un formulaire utilisateur.
+  Returns a changeset for tracking or validating user changes.
   """
   def change_user(%User{} = user, attrs \\ %{}) do
     User.changeset(user, attrs)

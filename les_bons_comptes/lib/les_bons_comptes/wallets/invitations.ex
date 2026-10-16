@@ -1,7 +1,7 @@
 defmodule LesBonsComptes.Wallets.Invitations do
   @moduledoc """
-  Gestion du cycle de vie des invitations aux porte-monnaies.
-  Comprend la création, l'envoi, la notification, l'acceptation, le refus et l'annulation.
+  Manages wallet invitation lifecycles.
+  Includes creation, sending, notification, acceptance, decline, and cancellation.
   """
 
   import Ecto.Query, warn: false
@@ -10,9 +10,9 @@ defmodule LesBonsComptes.Wallets.Invitations do
   alias LesBonsComptes.Wallets.{InvitationNotifier, Members, Wallet, WalletInvitation}
 
   @doc """
-  Crée et envoie une invitation pour rejoindre un porte-monnaie (IF-40, IF-41, IF-42).
-  Vérifie que l'émetteur est propriétaire, valide que l'utilisateur invité existe,
-  n'est pas déjà membre, et n'a pas déjà d'invitation en attente.
+  Creates and sends an invitation to join a wallet (IF-40, IF-41, IF-42).
+  Verifies that the sender is the owner, validates that the invited user exists,
+  is not already a member, and has no pending invitation.
   """
   def create(%User{} = inviter, %Wallet{} = wallet, attrs) do
     if wallet.status != "open" do
@@ -69,7 +69,7 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Liste toutes les invitations en attente pour un utilisateur donné (IF-44).
+  Lists all pending invitations for a given user (IF-44).
   """
   def list_pending_for_user(user_id) when is_integer(user_id) do
     from(i in WalletInvitation,
@@ -81,7 +81,7 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Liste toutes les invitations en attente pour un porte-monnaie donné (IF-43).
+  Lists all pending invitations for a given wallet (IF-43).
   """
   def list_pending_for_wallet(wallet_id) when is_integer(wallet_id) do
     from(i in WalletInvitation,
@@ -93,7 +93,7 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Récupère une invitation par son identifiant. Lève si introuvable.
+  Retrieves an invitation by ID. Raises if not found.
   """
   def get!(id) do
     WalletInvitation
@@ -102,8 +102,8 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Accepte une invitation au porte-monnaie (IF-44, IF-45).
-  Associe le compte de l'utilisateur invité comme membre effectif du groupe dans une transaction.
+  Accepts an invitation to a wallet (IF-44, IF-45).
+  Associates the invited user's account as an active group member within a transaction.
   """
   def accept(%User{} = user, invitation_id)
       when is_integer(invitation_id) or is_binary(invitation_id) do
@@ -155,7 +155,7 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Refuse une invitation au porte-monnaie (IF-44).
+  Declines an invitation to a wallet (IF-44).
   """
   def decline(%User{} = user, invitation_id)
       when is_integer(invitation_id) or is_binary(invitation_id) do
@@ -179,7 +179,7 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Permet au propriétaire du porte-monnaie d'annuler ou retirer une invitation envoyée (pending ou declined).
+  Allows the wallet owner to cancel or revoke a sent invitation (pending or declined).
   """
   def cancel(%User{} = user, invitation_id) do
     invitation = get!(invitation_id)
@@ -195,13 +195,13 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   # ---------------------------------------------------------------------------
-  # US: Récupération et filtrage des portes-monnaies invités (Epic)
+  # Invited wallets retrieval and filtering (Epic)
   # ---------------------------------------------------------------------------
 
   @doc """
-  Récupère la liste des portes-monnaies auxquels un utilisateur a été invité.
-  Chaque porte-monnaie retourné possède son invitation associée préchargée dans le champ virtuel `:invitation`.
-  Permet de filtrer optionnellement par le statut de l'invitation (US: Filtrage des portes-monnaies par statut d'invitation).
+  Retrieves the list of wallets to which a user has been invited.
+  Each returned wallet has its associated invitation preloaded into the virtual `:invitation` field.
+  Optionally filters by invitation status.
   """
   def list_invited_wallets_for_user(user_or_id, status \\ nil)
 
@@ -229,8 +229,8 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Récupère les portes-monnaies invités sous forme de résultat {:ok, wallets} ou {:error, reason}.
-  Facilite la gestion des erreurs de chargement dans l'interface (US: Gestion des erreurs de chargement).
+  Retrieves invited wallets as an `{:ok, wallets}` or `{:error, reason}` result.
+  Facilitates loading error handling in the UI.
   """
   def fetch_invited_wallets(user_or_id, status \\ nil) do
     try do
@@ -241,8 +241,8 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Filtre une requête Ecto ou une liste de portes-monnaies ou d'invitations par statut d'invitation.
-  Accepte 'all', 'pending', 'accepted', 'declined', 'cancelled' (sous forme d'atome ou de chaîne).
+  Filters an Ecto query or a list of wallets or invitations by invitation status.
+  Accepts 'all', 'pending', 'accepted', 'declined', 'cancelled' (as atom or string).
   """
   def filter_invited_wallets_by_status(query_or_list, status)
 
@@ -277,7 +277,7 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
-  Liste toutes les invitations d'un utilisateur donné avec filtre optionnel sur le statut.
+  Lists all invitations for a given user with optional status filter.
   """
   def list_for_user(user_or_id, status \\ nil)
 

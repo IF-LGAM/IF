@@ -22,7 +22,7 @@ defmodule LesBonsComptesWeb.Router do
 
     get "/", PageController, :home
 
-    # Routes d'authentification et gestion de session (IF-27)
+    # Authentication routes and session management (IF-27)
     get "/users/log_in", UserSessionController, :create
     post "/users/log_in", UserSessionController, :create
     delete "/users/log_out", UserSessionController, :delete
@@ -47,7 +47,7 @@ defmodule LesBonsComptesWeb.Router do
     end
   end
 
-  # API REST pour les remboursements et soldes
+  # REST API for settlements and balances
   scope "/api", LesBonsComptesWeb do
     pipe_through :api
 

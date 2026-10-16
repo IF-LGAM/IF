@@ -1,8 +1,8 @@
 defmodule LesBonsComptesWeb.UserAuth do
   @moduledoc """
-  Module d'authentification et de gestion de session pour Les Bons Comptes.
-  Gère la persistance de session par cookies signés, les tokens d'auto-connexion post-inscription,
-  et les hooks de montage pour Phoenix LiveView.
+  Authentication and session management module for Les Bons Comptes.
+  Handles session persistence via signed cookies, auto-login tokens post-registration,
+  and mount hooks for Phoenix LiveView.
   """
 
   use LesBonsComptesWeb, :verified_routes
@@ -12,12 +12,12 @@ defmodule LesBonsComptesWeb.UserAuth do
 
   alias LesBonsComptes.Accounts
 
-  # Durée de validité du token d'auto-connexion post-inscription (en secondes)
+  # Auto-login token validity duration post-registration (in seconds)
   @token_max_age 60
 
   @doc """
-  Connecte un utilisateur en initialisant son ID dans la session signée.
-  Renouvelle l'ID de session pour prévenir les attaques de fixation de session.
+  Logs in a user by storing their ID in the signed session.
+  Renews session ID to prevent session fixation attacks.
   """
   def log_in_user(conn, user, return_to \\ ~p"/") do
     conn
@@ -28,7 +28,7 @@ defmodule LesBonsComptesWeb.UserAuth do
   end
 
   @doc """
-  Déconnecte l'utilisateur en détruisant sa session courante.
+  Logs out the user by clearing their current session.
   """
   def log_out_user(conn) do
     if live_socket_id = get_session(conn, :live_socket_id) do
@@ -42,8 +42,8 @@ defmodule LesBonsComptesWeb.UserAuth do
   end
 
   @doc """
-  Plug qui extrait l'utilisateur courant depuis la session signée
-  et l'assigne à `conn.assigns[:current_user]`.
+  Plug that extracts the current user from the signed session
+  and assigns it to `conn.assigns[:current_user]`.
   """
   def fetch_current_user(conn, _opts) do
     user_id = get_session(conn, :user_id)
@@ -52,15 +52,15 @@ defmodule LesBonsComptesWeb.UserAuth do
   end
 
   @doc """
-  Génère un token éphémère signé pour connecter l'utilisateur immédiatement
-  après la création de son compte depuis une LiveView.
+  Generates an ephemeral signed token to log in the user immediately
+  after account creation from a LiveView.
   """
   def sign_user_token(user_id) do
     Phoenix.Token.sign(LesBonsComptesWeb.Endpoint, "user_session", user_id)
   end
 
   @doc """
-  Vérifie le token éphémère d'auto-connexion.
+  Verifies the ephemeral auto-login token.
   """
   def verify_user_token(token) do
     Phoenix.Token.verify(LesBonsComptesWeb.Endpoint, "user_session", token,
@@ -69,8 +69,8 @@ defmodule LesBonsComptesWeb.UserAuth do
   end
 
   @doc """
-  Hook `on_mount` pour Phoenix LiveView permettant d'assigner l'utilisateur courant
-  à partir de la session WebSocket.
+  `on_mount` hook for Phoenix LiveView to assign the current user
+  from the WebSocket session.
   """
   def on_mount(:mount_current_user, _params, session, socket) do
     {:cont, mount_current_user(socket, session)}
@@ -112,7 +112,7 @@ defmodule LesBonsComptesWeb.UserAuth do
   end
 
   @doc """
-  Plug HTTP pour bloquer les requêtes non authentifiées sur les routes contrôleur.
+  HTTP plug to block unauthenticated requests on controller routes.
   """
   def require_authenticated_user(conn, _opts) do
     if conn.assigns[:current_user] do

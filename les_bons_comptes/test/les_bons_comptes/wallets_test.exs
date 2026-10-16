@@ -34,7 +34,7 @@ defmodule LesBonsComptes.WalletsTest do
       assert wallet.currency == "EUR"
       assert wallet.creator_id == creator.id
 
-      # Vérification de l'initialisation des droits et du propriétaire (IF-36)
+      # Verify permissions initialization and owner role (IF-36)
       assert length(wallet.members) == 1
       [owner_member] = wallet.members
       assert owner_member.role == "owner"
@@ -62,12 +62,12 @@ defmodule LesBonsComptes.WalletsTest do
       assert "Bob" in member_names
       assert "Charlie (sans compte)" in member_names
 
-      # Bob est lié au compte utilisateur
+      # Bob is linked to the user account
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
       assert bob_member.user_id == registered_friend.id
       assert bob_member.role == "member"
 
-      # Charlie est un participant externe sans compte utilisateur lié
+      # Charlie is an external participant with no linked user account
       charlie_member = Enum.find(wallet.members, &(&1.name == "Charlie (sans compte)"))
       assert charlie_member.user_id == nil
       assert charlie_member.role == "member"
@@ -109,16 +109,16 @@ defmodule LesBonsComptes.WalletsTest do
       user1 = create_user(%{name: "User 1"})
       user2 = create_user(%{name: "User 2"})
 
-      # Wallet créé par user1 avec user2
+      # Wallet created by user1 with user2
       {:ok, wallet1} =
         Wallets.create_wallet(user1, %{name: "Porte-monnaie 1"}, [
           %{name: user2.name, user_id: user2.id}
         ])
 
-      # Wallet créé par user2 seul
+      # Wallet created by user2 alone
       {:ok, wallet2} = Wallets.create_wallet(user2, %{name: "Porte-monnaie 2"})
 
-      # Wallet d'un tiers sans user1
+      # Third-party wallet without user1
       user3 = create_user()
       {:ok, _wallet3} = Wallets.create_wallet(user3, %{name: "Porte-monnaie 3"})
 
@@ -364,12 +364,12 @@ defmodule LesBonsComptes.WalletsTest do
       assert member.user_id == invitee.id
       assert member.role == "member"
 
-      # Vérification dans la base
+      # Verification in database
       updated_wallet = Wallets.get_wallet!(wallet.id)
       assert length(updated_wallet.members) == 2
       assert Enum.any?(updated_wallet.members, &(&1.user_id == invitee.id))
 
-      # L'invitation n'est plus en attente
+      # Invitation is no longer pending
       assert Wallets.list_pending_invitations_for_user(invitee.id) == []
     end
 
@@ -396,7 +396,7 @@ defmodule LesBonsComptes.WalletsTest do
       assert {:ok, declined} = Wallets.decline_invitation(invitee, invitation.id)
       assert declined.status == "declined"
 
-      # Ne fait pas partie des membres
+      # Is not part of members
       updated_wallet = Wallets.get_wallet!(wallet.id)
       assert length(updated_wallet.members) == 1
       refute Enum.any?(updated_wallet.members, &(&1.user_id == invitee.id))
@@ -531,13 +531,13 @@ defmodule LesBonsComptes.WalletsTest do
 
       {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
 
-      # Création refusée
+      # Creation rejected
       other = create_user(%{email: "other_phase2@test.com"})
 
       assert {:error, :invitations_disabled} =
                Wallets.create_invitation(owner, pending_wallet, %{email: other.email})
 
-      # Acceptation de l'invitation existante refusée
+      # Acceptance of existing invitation rejected
       assert {:error, :invitations_disabled} =
                Wallets.accept_invitation(invitee, invitation.id)
     end
@@ -601,35 +601,35 @@ defmodule LesBonsComptes.WalletsTest do
       {:ok, inv_c} = Wallets.create_invitation(owner, w_cancelled, %{email: invitee.email})
       {:ok, _cancelled} = Wallets.cancel_invitation(owner, inv_c.id)
 
-      # 1. Filtre par défaut ou "all" : tous les 4 sont présents
+      # 1. Default filter or "all": all 4 are present
       all_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "all")
       assert length(all_wallets) == 4
 
-      # 2. Filtre "pending"
+      # 2. "pending" filter
       pending_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "pending")
       assert length(pending_wallets) == 1
       assert hd(pending_wallets).id == w_pending.id
       assert hd(pending_wallets).invitation.status == "pending"
 
-      # 3. Filtre "accepted"
+      # 3. "accepted" filter
       accepted_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "accepted")
       assert length(accepted_wallets) == 1
       assert hd(accepted_wallets).id == w_accepted.id
       assert hd(accepted_wallets).invitation.status == "accepted"
 
-      # 4. Filtre "declined"
+      # 4. "declined" filter
       declined_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "declined")
       assert length(declined_wallets) == 1
       assert hd(declined_wallets).id == w_declined.id
       assert hd(declined_wallets).invitation.status == "declined"
 
-      # 5. Filtre "cancelled"
+      # 5. "cancelled" filter
       cancelled_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "cancelled")
       assert length(cancelled_wallets) == 1
       assert hd(cancelled_wallets).id == w_cancelled.id
       assert hd(cancelled_wallets).invitation.status == "cancelled"
 
-      # 6. Test avec atomes (:pending, :accepted)
+      # 6. Test with atoms (:pending, :accepted)
       assert length(Wallets.list_invited_wallets_for_user(invitee, :pending)) == 1
       assert length(Wallets.list_invited_wallets_for_user(invitee, :accepted)) == 1
     end
@@ -696,14 +696,14 @@ defmodule LesBonsComptes.WalletsTest do
       {:ok, closed_w} = Wallets.create_wallet(user, %{name: "Closed W"})
       {:ok, _closed} = Wallets.close_wallet(user, closed_w)
 
-      # 1. Requête / base de données
+      # 1. Database query
       assert length(Wallets.list_wallets_for_user(user.id, "open")) == 1
       assert length(Wallets.list_wallets_for_user(user.id, "closed")) == 1
       assert length(Wallets.list_wallets_for_user(user.id, :open)) == 1
       assert length(Wallets.list_wallets_for_user(user.id, :closed)) == 1
       assert length(Wallets.list_wallets_for_user(user.id, "all")) == 2
 
-      # 2. Liste en mémoire
+      # 2. In-memory list
       all_wallets = Wallets.list_wallets_for_user(user.id)
       assert length(Wallets.filter_wallets_by_status(all_wallets, "open")) == 1
       assert length(Wallets.filter_wallets_by_status(all_wallets, "closed")) == 1

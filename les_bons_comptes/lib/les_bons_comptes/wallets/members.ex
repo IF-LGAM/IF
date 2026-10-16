@@ -1,7 +1,7 @@
 defmodule LesBonsComptes.Wallets.Members do
   @moduledoc """
-  Gestion des membres et participants des porte-monnaies.
-  Comprend l'ajout, le retrait, les permissions et la validation des participants.
+  Manages wallet members and participants.
+  Includes participant addition, removal, permissions, and validation.
   """
 
   alias LesBonsComptes.Accounts
@@ -10,7 +10,7 @@ defmodule LesBonsComptes.Wallets.Members do
   alias LesBonsComptes.Wallets.{Wallet, WalletMember}
 
   @doc """
-  Vérifie si un utilisateur est le propriétaire du porte-monnaie.
+  Checks if a user is the owner of the wallet.
   """
   def owner?(%Wallet{} = wallet, %User{} = user) do
     wallet.creator_id == user.id
@@ -23,7 +23,7 @@ defmodule LesBonsComptes.Wallets.Members do
   def owner?(_, _), do: false
 
   @doc """
-  Ajoute un nouveau participant à un porte-monnaie avec vérification que l'utilisateur est le propriétaire.
+  Adds a new participant to a wallet after checking that the user is the owner.
   """
   def add(%User{} = user, %Wallet{} = wallet, attrs) do
     if owner?(wallet, user) do
@@ -34,7 +34,7 @@ defmodule LesBonsComptes.Wallets.Members do
   end
 
   @doc """
-  Ajoute un nouveau participant à un porte-monnaie existant.
+  Adds a new participant to an existing wallet.
   """
   def add(%Wallet{} = wallet, attrs) do
     user_id = attrs[:user_id] || attrs["user_id"]
@@ -53,8 +53,8 @@ defmodule LesBonsComptes.Wallets.Members do
   end
 
   @doc """
-  Retire un participant d'un porte-monnaie avec vérification que l'utilisateur est le propriétaire.
-  Le propriétaire ne peut pas être retiré de son propre porte-monnaie.
+  Removes a participant from a wallet after checking that the user is the owner.
+  The owner cannot be removed from their own wallet.
   """
   def remove(%User{} = user, %Wallet{} = wallet, member_id) do
     if owner?(wallet, user) do
@@ -74,7 +74,7 @@ defmodule LesBonsComptes.Wallets.Members do
   end
 
   @doc """
-  Permet à un membre (non-propriétaire) de quitter volontairement un porte-monnaie commun.
+  Allows a non-owner member to voluntarily leave a shared wallet.
   """
   def leave(%User{} = user, %Wallet{} = wallet) do
     case Repo.get_by(WalletMember, wallet_id: wallet.id, user_id: user.id) do
@@ -90,10 +90,10 @@ defmodule LesBonsComptes.Wallets.Members do
   end
 
   @doc """
-  Valide l'ajout d'un nouveau participant par email pour un créateur ou propriétaire donné.
-  Vérifie que l'email est présent, valide, n'appartient pas au propriétaire,
-  n'est pas déjà dans la liste des participants, et correspond à un compte inscrit.
-  Retourne `{:ok, user}` ou `{:error, message}`.
+  Validates adding a new participant by email for a given creator or owner.
+  Verifies that the email is present, valid, does not belong to the owner,
+  is not already in the participant list, and matches an enrolled account.
+  Returns `{:ok, user}` or `{:error, message}`.
   """
   def validate_new_participant(existing_participants, %User{} = current_user, email) do
     email = String.trim(to_string(email || ""))
@@ -127,7 +127,7 @@ defmodule LesBonsComptes.Wallets.Members do
   end
 
   @doc """
-  Insère les membres initiaux supplémentaires lors de la création transactionnelle du porte-monnaie.
+  Inserts additional initial members during transactional wallet creation.
   """
   def insert_additional_members(wallet, creator, participants) do
     filtered =

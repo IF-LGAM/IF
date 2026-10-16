@@ -1,7 +1,7 @@
 defmodule LesBonsComptes.Wallets.WalletInvitation do
   @moduledoc """
-  Représente une invitation à rejoindre un porte-monnaie commun.
-  Un utilisateur invité doit accepter l'invitation pour devenir membre effectif.
+  Represents an invitation to join a shared wallet.
+  An invited user must accept the invitation to become an active member.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -20,7 +20,7 @@ defmodule LesBonsComptes.Wallets.WalletInvitation do
   @statuses ~w(pending accepted declined cancelled)
 
   @doc """
-  Changeset pour la création ou mise à jour d'une invitation.
+  Changeset for creating or updating an invitation.
   """
   def changeset(invitation, attrs) do
     invitation

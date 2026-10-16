@@ -1,13 +1,13 @@
 defmodule LesBonsComptes.Wallets.InvitationNotifier do
   @moduledoc """
-  Délivre les notifications par email pour les invitations aux porte-monnaies (IF-40).
+  Delivers email notifications for wallet invitations (IF-40).
   """
   import Swoosh.Email
 
   alias LesBonsComptes.Mailer
 
   @doc """
-  Envoie une notification d'invitation par email au destinataire.
+  Sends an invitation notification email to the recipient.
   """
   def deliver_invitation(invitation, wallet, inviter) do
     email =
