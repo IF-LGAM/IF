@@ -1,8 +1,8 @@
 defmodule LesBonsComptes.Expenses do
   @moduledoc """
-  Contexte métier pour la gestion des dépenses communes (IF-62).
-  Gère la déclaration de dépenses, l'association au compte dépenseur (membre payeur),
-  la validation des montants et la consultation des dépenses par porte-monnaie.
+  Business context for shared expense management (IF-62).
+  Handles expense creation, payer member assignment,
+  amount validations, and expense retrieval by wallet.
   """
 
   import Ecto.Query, warn: false
@@ -13,7 +13,7 @@ defmodule LesBonsComptes.Expenses do
   alias LesBonsComptes.Wallets.Wallet
 
   @doc """
-  Retourne la liste des dépenses d'un porte-monnaie, triées par date décroissante.
+  Returns the list of expenses for a wallet, ordered by descending date.
   """
   def list_expenses_for_wallet(wallet_id) when is_integer(wallet_id) or is_binary(wallet_id) do
     from(e in Expense,
@@ -25,8 +25,8 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Récupère une dépense par son identifiant avec ses associations préchargées.
-  Lève si non trouvée.
+  Retrieves an expense by its ID with its associations preloaded.
+  Raises if not found.
   """
   def get_expense!(id) do
     Expense
@@ -35,17 +35,17 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Retourne un changeset pour une dépense.
+  Returns a changeset for tracking expense changes.
   """
   def change_expense(%Expense{} = expense, attrs \\ %{}) do
     Expense.changeset(expense, attrs)
   end
 
   @doc """
-  Déclare une nouvelle dépense associée à un porte-monnaie (IF-66, IF-70).
-  Vérifie que l'utilisateur est bien membre du groupe (ou propriétaire).
-  Affecte par défaut la dépense au compte dépenseur de l'utilisateur connecté (IF-68),
-  ou au membre sélectionné si valide pour ce porte-monnaie.
+  Creates a new expense associated with a wallet (IF-66, IF-70).
+  Verifies that the user is a member of the group (or the owner).
+  Defaults the expense payer to the logged-in user (IF-68),
+  or to the selected member if valid for this wallet.
   """
   def create_expense(%User{} = user, %Wallet{} = wallet, attrs) do
     wallet = Repo.preload(wallet, [:members])
@@ -119,8 +119,8 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Calcule le montant total des dépenses enregistrées pour un porte-monnaie.
-  Retourne un %Decimal{}.
+  Calculates the total amount of recorded expenses for a wallet.
+  Returns a %Decimal{}.
   """
   def total_expenses_for_wallet(wallet_id) do
     query =
@@ -133,8 +133,8 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Calcule le total dépensé par membre dans un porte-monnaie.
-  Retourne une map `%{member_id => Decimal.t}`.
+  Calculates the total amount spent by each member in a wallet.
+  Returns a map `%{member_id => Decimal.t}`.
   """
   def total_expenses_by_member(wallet_id) do
     from(e in Expense,
@@ -147,7 +147,7 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Compte le nombre total de dépenses enregistrées pour un porte-monnaie.
+  Counts the total number of recorded expenses for a wallet.
   """
   def count_expenses_for_wallet(wallet_id) when is_integer(wallet_id) or is_binary(wallet_id) do
     from(e in Expense,
@@ -158,11 +158,11 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Vérifie si un utilisateur a le droit de supprimer une dépense (IF-77, IF-79).
-  Autorisé UNIQUEMENT si le porte-monnaie est ouvert (en phase de déclaration) ET si l'utilisateur est :
-  - le créateur de la dépense (`created_by_id == user.id`),
-  - le compte dépenseur associé (`payer.user_id == user.id`),
-  - ou le propriétaire du porte-monnaie (`wallet.creator_id == user.id`).
+  Checks if a user has permission to delete an expense (IF-77, IF-79).
+  Allowed ONLY if the wallet is open (in declaration stage) AND the user is:
+  - the expense creator (`created_by_id == user.id`),
+  - the associated payer (`payer.user_id == user.id`),
+  - or the wallet owner (`wallet.creator_id == user.id`).
   """
   def can_delete_expense?(%User{} = user, %Expense{} = expense) do
     expense = Repo.preload(expense, [:wallet, :payer])
@@ -178,8 +178,8 @@ defmodule LesBonsComptes.Expenses do
   def can_delete_expense?(_, _), do: false
 
   @doc """
-  Supprime une dépense après vérification des droits (IF-78, IF-79).
-  Rejette avec `{:error, :wallet_closed}` si le porte-monnaie n'est plus en phase de déclaration.
+  Deletes an expense after checking permissions (IF-78, IF-79).
+  Rejects with `{:error, :wallet_closed}` if the wallet is no longer in the declaration stage.
   """
   def delete_expense(%User{} = user, %Expense{} = expense) do
     expense = Repo.preload(expense, [:wallet, :payer])
@@ -203,10 +203,10 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Vérifie si un utilisateur a le droit de modifier une dépense.
-  Autorisé UNIQUEMENT si le porte-monnaie est ouvert (en phase de déclaration) ET si l'utilisateur est :
-  - la personne ayant ajouté la dépense (`created_by_id == user.id`),
-  - ou la personne ayant réalisé la dépense (`payer.user_id == user.id`).
+  Checks if a user has permission to edit an expense.
+  Allowed ONLY if the wallet is open (in declaration stage) AND the user is:
+  - the person who added the expense (`created_by_id == user.id`),
+  - or the person who paid the expense (`payer.user_id == user.id`).
   """
   def can_edit_expense?(%User{} = user, %Expense{} = expense) do
     expense = Repo.preload(expense, [:wallet, :payer])
@@ -221,9 +221,9 @@ defmodule LesBonsComptes.Expenses do
   def can_edit_expense?(_, _), do: false
 
   @doc """
-  Met à jour une dépense après vérification des droits.
-  Seule la personne ayant ajouté la dépense ou le payeur associé peut la modifier,
-  et uniquement si le porte-monnaie est en phase de déclaration (ouvert).
+  Updates an expense after checking permissions.
+  Only the person who added the expense or the associated payer can edit it,
+  and only if the wallet is in the declaration stage (open).
   """
   def update_expense(%User{} = user, %Expense{} = expense, attrs) do
     expense = Repo.preload(expense, [:wallet, :payer])
@@ -270,24 +270,24 @@ defmodule LesBonsComptes.Expenses do
   end
 
   # ---------------------------------------------------------------------------
-  # Récupération des données nécessaires au calcul des soldes
+  # Balance computation data retrieval
   # ---------------------------------------------------------------------------
 
   @doc """
-  Récupère et agrège toutes les données nécessaires au calcul des soldes d'un porte-monnaie.
-  Accepte un struct `%Wallet{}`, un identifiant entier ou une chaîne de caractères (`"1"`).
+  Retrieves and aggregates all data needed to calculate balances for a wallet.
+  Accepts a `%Wallet{}` struct, an integer ID, or a string ID (`"1"`).
 
-  Retourne une map contenant :
-  - `:wallet` : struct `%Wallet{}` avec ses membres préchargés
-  - `:wallet_id` : identifiant entier du porte-monnaie
-  - `:currency` : devise du porte-monnaie (ex: "EUR")
-  - `:members` : liste des participants (`[%WalletMember{}]`)
-  - `:members_count` : nombre total de participants
-  - `:total_expenses` : montant total cumulé des dépenses (`%Decimal{}`)
-  - `:expenses_by_member` : map `%{member_id => total_payé}` (%Decimal{})
-  - `:expenses_count` : nombre total de dépenses enregistrées
+  Returns a map containing:
+  - `:wallet`: `%Wallet{}` struct with its members preloaded
+  - `:wallet_id`: integer wallet ID
+  - `:currency`: wallet currency (e.g., "EUR")
+  - `:members`: list of participants (`[%WalletMember{}]`)
+  - `:members_count`: total count of participants
+  - `:total_expenses`: cumulative total expense amount (`%Decimal{}`)
+  - `:expenses_by_member`: map `%{member_id => total_paid}` (%Decimal{})
+  - `:expenses_count`: total number of recorded expenses
 
-  Retourne `nil` si le porte-monnaie n'est pas trouvé ou si l'ID est invalide/`nil`.
+  Returns `nil` if the wallet is not found or if the ID is invalid/`nil`.
   """
   def get_balance_data(%Wallet{} = wallet) do
     wallet = Repo.preload(wallet, [:members])
@@ -311,7 +311,7 @@ defmodule LesBonsComptes.Expenses do
   def get_balance_data(_), do: nil
 
   @doc """
-  Variante de `get_balance_data/1` retournant `{:ok, balance_data}` ou `{:error, :not_found}`.
+  Variant of `get_balance_data/1` returning `{:ok, balance_data}` or `{:error, :not_found}`.
   """
   def fetch_balance_data(wallet_or_id) do
     case get_balance_data(wallet_or_id) do
@@ -339,33 +339,33 @@ defmodule LesBonsComptes.Expenses do
   end
 
   # ---------------------------------------------------------------------------
-  # Calcul des soldes et des comptes créditeurs
+  # Balance and creditor account calculations
   # ---------------------------------------------------------------------------
 
   @doc """
-  Calcule la balance nette de chaque participant d'un porte-monnaie.
-  Pour chaque membre, la part équitable théorique (total des dépenses / nombre de membres)
-  est déduite du total qu'il a payé :
-  `balance = total_payé - part_équitable`.
+  Calculates the net balance of each participant in a wallet.
+  For each member, the theoretical fair share (total expenses / number of members)
+  is deducted from the total amount they paid:
+  `balance = total_paid - fair_share`.
 
-  Accepte soit :
-  - une structure de données pré-récupérée issue de `get_balance_data/1`
-  - un struct `%Wallet{}`
-  - un identifiant de porte-monnaie (entier ou chaîne)
+  Accepts either:
+  - a pre-retrieved data structure from `get_balance_data/1`
+  - a `%Wallet{}` struct
+  - a wallet ID (integer or string)
 
-  Retourne une liste de maps avec pour chaque membre :
-  - `:member` : Struct `%WalletMember{}`
-  - `:member_id` : ID du membre
-  - `:name` : Nom du membre
-  - `:email` : Email du membre
-  - `:total_paid` : Montant total payé (%Decimal{})
-  - `:fair_share` : Part théorique due par membre (%Decimal{})
-  - `:balance` : Solde net (%Decimal{}), positif si créditeur, négatif si débiteur
-  - `:amount` : Montant positif à recevoir si créditeur (%Decimal{}), sinon 0.00
-  - `:amount_to_receive` : Alias de :amount
-  - `:amount_to_pay` : Montant positif à régler si débiteur (%Decimal{}), sinon 0.00
-  - `:type` : `:creditor` (> 0), `:debtor` (< 0) ou `:balanced` (== 0)
-  - `:currency` : Devise du porte-monnaie
+  Returns a list of maps for each member with:
+  - `:member`: Struct `%WalletMember{}`
+  - `:member_id`: Member ID
+  - `:name`: Member name
+  - `:email`: Member email
+  - `:total_paid`: Total amount paid (%Decimal{})
+  - `:fair_share`: Theoretical share due per member (%Decimal{})
+  - `:balance`: Net balance (%Decimal{}), positive if creditor, negative if debtor
+  - `:amount`: Positive amount to receive if creditor (%Decimal{}), otherwise 0.00
+  - `:amount_to_receive`: Alias for :amount
+  - `:amount_to_pay`: Positive amount to pay if debtor (%Decimal{}), otherwise 0.00
+  - `:type`: `:creditor` (> 0), `:debtor` (< 0), or `:balanced` (== 0)
+  - `:currency`: Wallet currency
   """
   def calculate_balances(
         %{members: _, members_count: _, total_expenses: _, expenses_by_member: _} = data
@@ -381,21 +381,21 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Calcule les comptes créditeurs d'un porte-monnaie et les montants qu'ils doivent recevoir.
-  Filtre les participants qui ont payé plus que leur part équitable (`balance > 0.00`).
-  Trie les comptes créditeurs par montant à recevoir décroissant.
+  Calculates creditor accounts for a wallet and the amounts they should receive.
+  Filters participants who paid more than their fair share (`balance > 0.00`).
+  Sorts creditor accounts in descending order of amount to receive.
 
-  Retourne une liste de maps contenant :
-  - `:member` : Struct `%WalletMember{}`
-  - `:member_id` : ID du membre
-  - `:name` : Nom du membre
-  - `:email` : Email du membre
-  - `:amount_to_receive` : Montant à recevoir (%Decimal{})
-  - `:amount` : Alias de `:amount_to_receive`
-  - `:total_paid` : Total payé par ce membre
-  - `:fair_share` : Part équitable due par chaque participant
-  - `:balance` : Solde net créditeur (%Decimal{})
-  - `:currency` : Devise du porte-monnaie
+  Returns a list of maps containing:
+  - `:member`: Struct `%WalletMember{}`
+  - `:member_id`: Member ID
+  - `:name`: Member name
+  - `:email`: Member email
+  - `:amount_to_receive`: Amount to receive (%Decimal{})
+  - `:amount`: Alias for `:amount_to_receive`
+  - `:total_paid`: Total paid by this member
+  - `:fair_share`: Fair share due by each participant
+  - `:balance`: Net creditor balance (%Decimal{})
+  - `:currency`: Wallet currency
   """
   def calculate_creditors(wallet_or_id) do
     wallet_or_id
@@ -405,32 +405,32 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Alias pour `calculate_creditors/1`.
+  Alias for `calculate_creditors/1`.
   """
   defdelegate list_creditors(wallet_or_id), to: __MODULE__, as: :calculate_creditors
 
   @doc """
-  Alias pour `calculate_creditors/1` pour la sous-tâche de calcul des comptes créditeurs.
+  Alias for `calculate_creditors/1` for the creditor accounts calculation subtask.
   """
   defdelegate calculate_creditor_accounts(wallet_or_id), to: __MODULE__, as: :calculate_creditors
 
   @doc """
-  Calcule les comptes débiteurs d'un porte-monnaie et les montants qu'ils doivent régler.
-  Filtre les participants qui doivent de l'argent (`balance < 0.00`).
-  Trie les comptes débiteurs par montant à régler décroissant.
+  Calculates debtor accounts for a wallet and the amounts they must pay.
+  Filters participants who owe money (`balance < 0.00`).
+  Sorts debtor accounts in descending order of amount to pay.
 
-  Retourne une liste de maps contenant :
-  - `:member` : Struct `%WalletMember{}`
-  - `:member_id` : ID du membre
-  - `:name` : Nom du membre
-  - `:email` : Email du membre
-  - `:amount_to_pay` : Montant positif à régler (%Decimal{})
-  - `:amount` : Alias de `:amount_to_pay`
-  - `:total_paid` : Total payé par ce membre
-  - `:fair_share` : Part équitable due par chaque participant
-  - `:balance` : Solde net débiteur (%Decimal{})
-  - `:currency` : Devise du porte-monnaie
-  - `:type` : `:debtor`
+  Returns a list of maps containing:
+  - `:member`: Struct `%WalletMember{}`
+  - `:member_id`: Member ID
+  - `:name`: Member name
+  - `:email`: Member email
+  - `:amount_to_pay`: Positive amount to pay (%Decimal{})
+  - `:amount`: Alias for `:amount_to_pay`
+  - `:total_paid`: Total paid by this member
+  - `:fair_share`: Fair share due by each participant
+  - `:balance`: Net debtor balance (%Decimal{})
+  - `:currency`: Wallet currency
+  - `:type`: `:debtor`
   """
   def calculate_debtors(wallet_or_id) do
     wallet_or_id
@@ -441,27 +441,27 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Alias pour `calculate_debtors/1`.
+  Alias for `calculate_debtors/1`.
   """
   defdelegate list_debtors(wallet_or_id), to: __MODULE__, as: :calculate_debtors
 
   @doc """
-  Alias pour `calculate_debtors/1` pour la sous-tâche de calcul des comptes débiteurs.
+  Alias for `calculate_debtors/1` for the debtor accounts calculation subtask.
   """
   defdelegate calculate_debtor_accounts(wallet_or_id), to: __MODULE__, as: :calculate_debtors
 
   @doc """
-  Calcule les virements optimisés entre participants pour solder l'ensemble des dettes
-  en minimisant le nombre total de transactions.
+  Calculates optimized transfers between participants to settle all debts
+  while minimizing the total number of transactions.
 
-  Algorithme :
-  1. Récupère les soldes calculés.
-  2. Isole les débiteurs (dette restante) et les créditeurs (créance restante).
-  3. Apparie en priorité les montants identiques (correspondance exacte 1 pour 1).
-  4. Apparie gloutonnement (greedy) le plus gros débiteur avec le plus gros créancier.
-  5. Ajuste si nécessaire les éventuels centimes résiduels dus aux arrondis de division.
+  Algorithm:
+  1. Retrieves calculated balances.
+  2. Isolates debtors (remaining debt) and creditors (remaining credit).
+  3. Matches identical amounts first (exact 1-to-1 match).
+  4. Greedily matches the largest debtor with the largest creditor.
+  5. Adjusts any residual rounding cents if necessary.
 
-  Retourne une liste de virements :
+  Returns a list of transfers:
   [
     %{
       from_id: integer,
@@ -516,7 +516,7 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Alias pour `calculate_settlements/1`.
+  Alias for `calculate_settlements/1`.
   """
   defdelegate optimize_settlements(wallet_or_id), to: __MODULE__, as: :calculate_settlements
 
@@ -678,11 +678,11 @@ defmodule LesBonsComptes.Expenses do
   end
 
   # ---------------------------------------------------------------------------
-  # Règlements de virements et persistance en base de données (IF-85)
+  # Transfer settlements and database persistence (IF-85)
   # ---------------------------------------------------------------------------
 
   @doc """
-  Liste tous les règlements enregistrés en base de données pour un porte-monnaie donné.
+  Lists all settled transfers recorded in the database for a given wallet.
   """
   def list_settled_transfers(wallet_id) when is_integer(wallet_id) or is_binary(wallet_id) do
     from(s in Settlement,
@@ -694,13 +694,13 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Valide et enregistre un virement en base de données par son débiteur.
-  Règles métier :
-  - Le porte-monnaie doit être en cours de virements ("pending_settlement").
-  - Seul le membre débiteur (`from_member.user_id == user.id`) peut effectuer le virement.
-  - Le virement est persisté dans la table `settlements`.
-  - Si tous les virements sont effectués, le porte-monnaie est automatiquement clôturé.
-  - Diffuse une notification PubSub aux autres utilisateurs connectés.
+  Validates and records a transfer in the database by its debtor.
+  Business rules:
+  - The wallet must be in the settlement phase ("pending_settlement").
+  - Only the debtor member (`from_member.user_id == user.id`) can make the transfer.
+  - The transfer is persisted in the `settlements` table.
+  - If all transfers are completed, the wallet is automatically closed.
+  - Broadcasts a PubSub notification to other connected users.
   """
   def settle_transfer(%User{} = user, wallet_or_id, from_id, to_id, amount) do
     case resolve_wallet_for_mock(wallet_or_id) do
@@ -793,8 +793,8 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Exécute une action de remboursement simulé (mock) pour un porte-monnaie clos (IF-85).
-  Prend en paramètre un porte-monnaie (%Wallet{} ou id) et une map d'attributs (%{from_id: ..., to_id: ..., amount: ...}).
+  Executes a simulated (mock) settlement action for a closed wallet (IF-85).
+  Takes a wallet (%Wallet{} or id) and an attributes map (%{from_id: ..., to_id: ..., amount: ...}).
   """
   def mock_settle_transfer(wallet_or_id, params) when is_map(params) do
     from_id = params[:from_id] || params["from_id"]
@@ -805,12 +805,12 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Exécute une action de règlement de virement entre deux membres pour un montant donné (IF-85).
-  Règles métier :
-  - Le porte-monnaie doit exister.
-  - Le porte-monnaie doit être validé ou clos (status in ["pending_settlement", "closed"]). S'il est ouvert, retourne `{:error, :wallet_not_closed}`.
-  - Les membres émetteur et récepteur doivent appartenir au porte-monnaie et être distincts.
-  - Le montant doit être supérieur à zéro.
+  Executes a transfer settlement action between two members for a given amount (IF-85).
+  Business rules:
+  - The wallet must exist.
+  - The wallet must be validated or closed (status in ["pending_settlement", "closed"]). If open, returns `{:error, :wallet_not_closed}`.
+  - Sender and receiver members must belong to the wallet and be distinct.
+  - Amount must be greater than zero.
   """
   def mock_settle_transfer(wallet_or_id, from_id, to_id, amount) do
     case resolve_wallet_for_mock(wallet_or_id) do
@@ -826,8 +826,8 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
-  Enregistre le règlement de l'ensemble des remboursements proposés pour un porte-monnaie validé ou clos.
-  Retourne `{:ok, settlements}` ou `{:error, reason}`.
+  Records the settlement of all proposed transfers for a validated or closed wallet.
+  Returns `{:ok, settlements}` or `{:error, reason}`.
   """
   def mock_settle_all(wallet_or_id) do
     case resolve_wallet_for_mock(wallet_or_id) do
@@ -841,7 +841,7 @@ defmodule LesBonsComptes.Expenses do
         settlements = calculate_settlements(wallet)
         now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-        # Enregistrer en base de données
+        # Persist in database
         Enum.each(settlements, fn s ->
           %Settlement{}
           |> Settlement.changeset(%{
@@ -858,7 +858,7 @@ defmodule LesBonsComptes.Expenses do
           )
         end)
 
-        # Clôture automatique du porte-monnaie lorsque tous les virements sont réalisés
+        # Automatically close wallet once all transfers are completed
         {:ok, _closed_wallet} = LesBonsComptes.Wallets.close_wallet(wallet)
 
         Phoenix.PubSub.broadcast(

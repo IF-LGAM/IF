@@ -12,8 +12,8 @@ defmodule LesBonsComptes.Accounts.User do
   end
 
   @doc """
-  Changeset pour l'inscription et la validation d'un utilisateur.
-  Applique les validations de présence, de format, d'unicité et le hachage sécurisé du mot de passe.
+  Changeset for user registration and validation.
+  Applies presence, format, and uniqueness validations, and securely hashes the password.
   """
   def changeset(user, attrs) do
     user
@@ -41,8 +41,8 @@ defmodule LesBonsComptes.Accounts.User do
   end
 
   @doc """
-  Vérifie si le mot de passe donné correspond au hachage stocké.
-  Protège contre les attaques par canal auxiliaire (timing attacks).
+  Verifies if the given password matches the stored hash.
+  Protects against timing attacks.
   """
   def valid_password?(%__MODULE__{hashed_password: hashed_password}, password)
       when is_binary(hashed_password) and is_binary(password) do

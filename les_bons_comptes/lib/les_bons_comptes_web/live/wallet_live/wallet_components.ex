@@ -1,13 +1,13 @@
 defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   @moduledoc """
-  Composants UI réutilisables pour les vues Wallet (New, Edit, Show).
+  Reusable UI components for Wallet views (New, Edit, Show).
   """
   use LesBonsComptesWeb, :html
 
   alias LesBonsComptes.Wallets.Wallet
 
   @doc """
-  Affiche le badge d'un membre (Propriétaire ou Inscrit).
+  Renders a member badge (Owner or Registered).
   """
   attr :role, :string, default: "member"
   attr :is_owner, :boolean, default: false
@@ -30,10 +30,10 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche le badge du statut du porte-monnaie selon l'étape (IF-85).
-  - open : Étape 1 : Ouvert (Déclarations en cours)
-  - pending_settlement : Étape 2 : Attente des virements
-  - closed : Étape 3 : Clos
+  Renders the wallet status badge based on its current step (IF-85).
+  - open: Step 1: Open (ongoing expense declarations)
+  - pending_settlement: Step 2: Awaiting bank transfers
+  - closed: Step 3: Closed
   """
   attr :status, :string, default: "open"
   attr :id, :string, default: "wallet-status-badge"
@@ -58,10 +58,10 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche le stepper horizontal visuel des 3 étapes du porte-monnaie (IF-85).
-  Étape 1 : Déclarations & Invitations
-  Étape 2 : Attente des virements
-  Étape 3 : Clôture
+  Renders the horizontal visual stepper for the 3 wallet lifecycle steps (IF-85).
+  Step 1: Declarations & Invitations
+  Step 2: Awaiting bank transfers
+  Step 3: Closure
   """
   attr :status, :string, default: "open"
 
@@ -114,7 +114,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche le badge du statut d'une invitation.
+  Renders the status badge of an invitation.
   """
   attr :status, :string, default: "pending"
 
@@ -142,7 +142,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche l'avatar circulaire avec la première lettre du nom.
+  Renders a circular avatar with the first letter of the name.
   """
   attr :name, :string, default: "?"
   attr :is_owner, :boolean, default: false
@@ -170,7 +170,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Rendu des champs généraux du formulaire Wallet (nom, devise, description).
+  Renders general wallet form fields (name, currency, description).
   """
   attr :form, Phoenix.HTML.Form, required: true
 
@@ -210,7 +210,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Sélecteur de participants : suggestions d'utilisateurs inscrits + ajout manuel par email.
+  Participant selector: registered user suggestions and manual addition via email.
   """
   attr :available_users, :list, default: []
   attr :custom_email, :string, default: ""
@@ -223,7 +223,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   def participant_selector(assigns) do
     ~H"""
     <div class="space-y-4">
-      <%!-- Option A : Suggestions parmi les utilisateurs inscrits --%>
+      <%!-- Option A: Suggestions from registered users --%>
       <div :if={@available_users != []} class="space-y-2">
         <label class="text-xs font-semibold text-base-content/70">
           Ajouter un utilisateur inscrit sur Les Bons Comptes :
@@ -245,7 +245,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
         </div>
       </div>
 
-      <%!-- Option B : Ajouter un participant inscrit par email --%>
+      <%!-- Option B: Add registered participant by email --%>
       <div class="bg-base-200/40 rounded-xl p-4 border border-base-200 space-y-3">
         <label class="text-xs font-semibold text-base-content/80 flex items-center gap-1.5">
           <.icon name="hero-envelope" class="size-4 text-base-content/60" />
@@ -279,7 +279,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Formate un montant monétaire avec 2 décimales.
+  Formats a monetary amount to 2 decimal places.
   """
   def format_amount(%Decimal{} = decimal) do
     :erlang.float_to_binary(Decimal.to_float(decimal), decimals: 2)
@@ -292,8 +292,8 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   def format_amount(_), do: "0.00"
 
   @doc """
-  Composant d'affichage d'un élément de dépense dans une liste.
-  Permet d'afficher l'action de suppression si autorisé (IF-81).
+  Renders an expense item in a list.
+  Displays the delete action if authorized (IF-81).
   """
   attr :expense, :map, required: true
   attr :can_delete, :boolean, default: false
@@ -357,8 +357,8 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Composant d'affichage d'un compte créditeur à rembourser.
-  Affiche le nom, le badge, le montant net à recevoir mis en valeur, et le détail du calcul.
+  Renders a creditor member to be reimbursed.
+  Displays the name, badge, net amount to receive highlighted, and calculation details.
   """
   attr :creditor, :map, required: true
   attr :currency, :string, default: "EUR"
@@ -408,8 +408,8 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Composant d'affichage d'un compte débiteur qui doit donner de l'argent.
-  Affiche le nom, le badge, le montant net à payer mis en valeur, et le détail du calcul.
+  Renders a debtor member who owes money.
+  Displays the name, badge, net amount to pay highlighted, and calculation details.
   """
   attr :debtor, :map, required: true
   attr :currency, :string, default: "EUR"
@@ -459,9 +459,9 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Composant d'affichage d'un virement proposé entre comptes (IF-84, IF-85).
-  Affiche le compte émetteur (débiteur), le flux vers le compte récepteur (créditeur),
-  le montant net optimisé à transférer, et le bouton/badge de règlement.
+  Renders a proposed settlement transfer between accounts (IF-84, IF-85).
+  Displays debtor account, transfer flow to creditor account,
+  optimized net amount to transfer, and settlement button/badge.
   """
   attr :settlement, :map, required: true
   attr :currency, :string, default: "EUR"
@@ -495,7 +495,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
       ]}
     >
       <div class="flex items-center gap-3 min-w-0">
-        <%!-- Débiteur --%>
+        <%!-- Debtor --%>
         <div class="flex items-center gap-2">
           <.member_avatar name={@settlement.from_name} size="size-8" />
           <div class="text-sm font-semibold text-base-content truncate">
@@ -561,7 +561,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Affiche le récapitulatif des remboursements et leur répartition entre comptes (IF-85).
+  Renders the settlement summary and distribution across accounts (IF-85).
   """
   attr :settlements, :list, default: []
   attr :mock_settled_ids, :any, default: MapSet.new()
@@ -628,7 +628,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
         </div>
       </div>
 
-      <%!-- Barre de progression --%>
+      <%!-- Progress bar --%>
       <div class="w-full bg-base-300 rounded-full h-2.5 overflow-hidden">
         <div
           id="settlement-progress-bar"
@@ -638,7 +638,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
         </div>
       </div>
 
-      <%!-- Répartition chiffrée --%>
+      <%!-- Numeric breakdown --%>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center pt-1 text-xs">
         <div class="bg-base-100 p-2 rounded-lg border border-base-200">
           <span class="text-base-content/60 block">Total à virer</span>
@@ -676,11 +676,11 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   # ---------------------------------------------------------------------------
-  # US : Affichage, filtrage et états des portes-monnaies invités
+  # US: Display, filtering, and states of invited wallets
   # ---------------------------------------------------------------------------
 
   @doc """
-  Barre de filtres par statut d'invitation (US: Filtrage des portes-monnaies par statut d'invitation).
+  Filter bar by invitation status (US: Filter wallets by invitation status).
   """
   attr :current_filter, :string, default: "all"
   attr :counts, :map, default: %{}
@@ -794,7 +794,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Carte d'un porte-monnaie invité avec actions et informations d'invitation (US: Affichage de la liste des portes-monnaies invités).
+  Invited wallet card with actions and invitation information (US: Display list of invited wallets).
   """
   attr :wallet, :map, required: true
   attr :current_user, :map, required: true
@@ -813,7 +813,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
       class="card bg-base-100 shadow-md hover:shadow-lg border border-base-200 hover:border-primary/40 transition-all rounded-2xl flex flex-col justify-between"
     >
       <div class="card-body p-6 space-y-4">
-        <%!-- En-tête de la carte --%>
+        <%!-- Card header --%>
         <div class="flex items-start justify-between gap-3">
           <div class="space-y-1">
             <div class="flex items-center gap-2 flex-wrap">
@@ -840,7 +840,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
 
         <div class="divider my-0"></div>
 
-        <%!-- Détails de l'invitation --%>
+        <%!-- Invitation details --%>
         <div class="text-xs text-base-content/70 space-y-1.5 bg-base-200/40 p-3 rounded-xl border border-base-200">
           <div class="flex items-center justify-between">
             <span class="flex items-center gap-1.5 text-base-content/60">
@@ -873,7 +873,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
           </div>
         </div>
 
-        <%!-- Actions selon le statut de l'invitation --%>
+        <%!-- Actions depending on invitation status --%>
         <div class="pt-2 flex items-center justify-end gap-2 border-t border-base-200">
           <%= cond do %>
             <% @status == "pending" -> %>
@@ -928,7 +928,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  État vide pour la liste des portes-monnaies invités (US: Gestion des états vides).
+  Empty state for invited wallets list (US: Empty state handling).
   """
   attr :status_filter, :string, default: "all"
 
@@ -988,7 +988,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  État d'erreur pour le chargement des portes-monnaies invités (US: Gestion des erreurs de chargement).
+  Error state for invited wallets loading (US: Loading error handling).
   """
   attr :error_message, :string,
     default: "Une erreur est survenue lors de la récupération des données."
@@ -1029,7 +1029,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  Barre de filtres par statut pour la liste des porte-monnaies (Épic: Lister les portes-monnaies ouverts / clos).
+  Filter bar by status for the wallet list (Epic: List open / closed wallets).
   """
   attr :current_filter, :string, default: "all"
   attr :counts, :map, default: %{}
@@ -1114,7 +1114,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  État vide pour la liste des porte-monnaies ouverts (US: Gestion des états vides).
+  Empty state for open wallets list (US: Empty state handling).
   """
   def empty_open_wallets_state(assigns) do
     ~H"""
@@ -1163,7 +1163,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  État vide pour la liste des porte-monnaies clos (US: Gestion des états vides).
+  Empty state for closed wallets list (US: Empty state handling).
   """
   def empty_closed_wallets_state(assigns) do
     ~H"""
@@ -1203,7 +1203,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  État vide générique avec bouton de réinitialisation si le filtre sélectionné ne renvoie aucun porte-monnaie.
+  Generic empty state with reset button when selected filter returns no wallets.
   """
   attr :filter, :string, default: "all"
 
@@ -1245,7 +1245,7 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   end
 
   @doc """
-  État d'erreur pour le chargement des porte-monnaies (US: Gestion des erreurs de chargement).
+  Error state for wallet list loading (US: Loading error handling).
   """
   attr :error_message, :string,
     default: "Une erreur est survenue lors de la récupération des porte-monnaies."

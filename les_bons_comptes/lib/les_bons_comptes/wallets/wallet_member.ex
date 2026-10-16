@@ -1,8 +1,8 @@
 defmodule LesBonsComptes.Wallets.WalletMember do
   @moduledoc """
-  Représente un participant / membre d'un porte-monnaie commun.
-  Un membre peut être associé à un compte utilisateur enregistré (`user_id`),
-  ou être un participant sans compte créé directement avec son nom.
+  Represents a participant / member of a shared wallet.
+  A member can be linked to a registered user account (`user_id`),
+  or be an unregistered participant identified only by name.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -25,7 +25,7 @@ defmodule LesBonsComptes.Wallets.WalletMember do
   @roles ~w(owner admin member)
 
   @doc """
-  Changeset pour la création ou modification d'un membre de porte-monnaie.
+  Changeset for creating or modifying a wallet member.
   """
   def changeset(member, attrs) do
     member

@@ -143,11 +143,11 @@ defmodule LesBonsComptesWeb.WalletLive.New do
   def handle_event("save", %{"wallet" => wallet_params}, socket) do
     current_user = socket.assigns.current_user
 
-    # Création du porte-monnaie avec le créateur comme propriétaire
-    # Les autres participants recevront une invitation à accepter (IF-37, IF-42)
+    # Wallet creation with creator as owner
+    # Other participants will receive an invitation to accept (IF-37, IF-42)
     case Wallets.create_wallet(current_user, wallet_params, []) do
       {:ok, wallet} ->
-        # Envoi des invitations par email aux participants choisis (IF-40, IF-42)
+        # Send email invitations to selected participants (IF-40, IF-42)
         Enum.each(socket.assigns.participants, fn p ->
           _ = Wallets.create_invitation(current_user, wallet, %{email: p.email})
         end)
@@ -182,7 +182,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-3xl mx-auto space-y-6">
-        <%!-- Fil d'Ariane & Retour --%>
+        <%!-- Breadcrumb & Back --%>
         <div class="flex items-center justify-between">
           <.link navigate={~p"/wallets"} class="btn btn-ghost btn-sm gap-2 text-base-content/70">
             <.icon name="hero-arrow-left" class="size-4" />
@@ -190,7 +190,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
           </.link>
         </div>
 
-        <%!-- En-tête --%>
+        <%!-- Header --%>
         <div class="text-center sm:text-left space-y-2">
           <div class="inline-flex items-center justify-center size-12 rounded-xl bg-primary/10 text-primary mb-1 shadow-sm">
             <.icon name="hero-wallet" class="size-6" />
@@ -203,7 +203,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
           </p>
         </div>
 
-        <%!-- Formulaire de création (IF-33, IF-35) --%>
+        <%!-- Creation form (IF-33, IF-35) --%>
         <.form
           for={@form}
           id="wallet-create-form"
@@ -211,7 +211,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
           phx-submit="save"
           class="space-y-6"
         >
-          <%!-- Carte Détails du porte-monnaie --%>
+          <%!-- Wallet details card --%>
           <div class="card bg-base-100 shadow-xl border border-base-200">
             <div class="card-body p-6 sm:p-8 space-y-4">
               <h2 class="text-lg font-bold text-base-content flex items-center gap-2">
@@ -223,7 +223,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
             </div>
           </div>
 
-          <%!-- Carte Sélection des participants à inviter (IF-29, IF-30, IF-36, IF-38, IF-39) --%>
+          <%!-- Participant invitation selection card (IF-29, IF-30, IF-36, IF-38, IF-39) --%>
           <div class="card bg-base-100 shadow-xl border border-base-200">
             <div class="card-body p-6 sm:p-8 space-y-5">
               <div class="flex items-center justify-between">
@@ -244,7 +244,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                 </span>
               </div>
 
-              <%!-- Message d'erreur participant si applicable (IF-35) --%>
+              <%!-- Participant error message if applicable (IF-35) --%>
               <div
                 :if={@participant_error}
                 id="participant-error-alert"
@@ -254,13 +254,13 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                 <span>{@participant_error}</span>
               </div>
 
-              <%!-- Liste actuelle des participants --%>
+              <%!-- Current participants list --%>
               <div class="space-y-2">
                 <label class="text-xs font-semibold text-base-content/70 uppercase tracking-wider">
                   Membres et personnes à inviter
                 </label>
 
-                <%!-- Propriétaire (Créateur) verrouillé (IF-36) --%>
+                <%!-- Locked owner (creator) (IF-36) --%>
                 <div
                   id={"member-owner-#{@current_user.id}"}
                   class="flex items-center justify-between p-3 rounded-xl bg-primary/10 border border-primary/20"
@@ -281,7 +281,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                   <span class="text-xs font-medium text-primary">Propriétaire</span>
                 </div>
 
-                <%!-- Participants en attente d'envoi d'invitation (IF-29, IF-38) --%>
+                <%!-- Participants pending invitation dispatch (IF-29, IF-38) --%>
                 <div id="participants-list" class="space-y-2">
                   <%= for participant <- @participants do %>
                     <div
@@ -332,7 +332,7 @@ defmodule LesBonsComptesWeb.WalletLive.New do
             </div>
           </div>
 
-          <%!-- Actions de soumission (IF-33, IF-34) --%>
+          <%!-- Submission actions (IF-33, IF-34) --%>
           <div class="flex items-center justify-end gap-3 pt-2">
             <.link navigate={~p"/wallets"} class="btn btn-ghost">
               Annuler

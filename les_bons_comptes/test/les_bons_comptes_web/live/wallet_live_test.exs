@@ -41,14 +41,14 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/new")
 
-      # Vérification de la présence des champs du formulaire (IF-33)
+      # Verify form fields presence (IF-33)
       assert has_element?(view, "#wallet-create-form")
       assert has_element?(view, "#wallet-name-input")
       assert has_element?(view, "#wallet-currency-select")
       assert has_element?(view, "#wallet-description-input")
       assert has_element?(view, "#submit-wallet-btn")
 
-      # Vérification de l'initialisation du propriétaire (IF-36)
+      # Verify owner initialization (IF-36)
       assert has_element?(view, "#member-owner-#{user.id}")
       assert element(view, "#member-owner-#{user.id}") |> render() =~ "Alice Dupont"
       assert element(view, "#member-owner-#{user.id}") |> render() =~ "Organisateur (Toi)"
@@ -62,7 +62,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/new")
 
-      # Validation en temps réel (phx-change)
+      # Real-time validation (phx-change)
       html =
         view
         |> form("#wallet-create-form", wallet: %{name: "A", currency: "EUR"})
@@ -84,7 +84,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/new")
 
-      # 1. Ajout d'un utilisateur inscrit parmi les suggestions
+      # 1. Add registered user from suggestions
       assert has_element?(view, "#add-user-btn-#{registered_friend.id}")
 
       view
@@ -95,7 +95,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(view) =~ "Inscrit"
       refute render(view) =~ "Externe"
 
-      # 2. Ajout manuel d'un participant inscrit par email
+      # 2. Manual addition of registered participant by email
       view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "charlie@email.com"})
@@ -104,15 +104,15 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(view) =~ "Inscrit"
       refute render(view) =~ "Externe"
 
-      # 3. Retrait d'un participant
+      # 3. Remove a participant
       view
       |> element("#participants-list > div:first-child button[phx-click='remove_participant']")
       |> render_click()
 
-      # Il ne reste plus qu'un participant dans la liste des membres ajoutés
+      # Only one participant remains in added members list
       refute has_element?(view, "#participants-list", "Bob Inscription")
       assert has_element?(view, "#participants-list", "Charlie Amis")
-      # Et Bob est de nouveau disponible dans les suggestions
+      # And Bob is available again in suggestions
       assert has_element?(view, "#add-user-btn-#{registered_friend.id}")
     end
 
@@ -128,27 +128,27 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/new")
 
-      # 1. Ajout de Bob
+      # 1. Add Bob
       view
       |> element("#add-user-btn-#{registered_friend.id}")
       |> render_click()
 
       assert has_element?(view, "#participants-list", "Bob Inscription")
 
-      # 2. Saisie manuelle par email (simulation d'événements de saisie)
+      # 2. Manual email entry (input event simulation)
       view
       |> element("#custom-participant-email")
       |> render_keyup(%{"value" => "charlie_manuel@example.com"})
 
-      # Bob est toujours présent après la saisie !
+      # Bob is still present after input!
       assert has_element?(view, "#participants-list", "Bob Inscription")
 
-      # 3. Clic sur Ajouter ce participant
+      # 3. Click Add this participant
       view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "charlie_manuel@example.com"})
 
-      # Les deux participants sont bien présents simultanément avec le badge Inscrit !
+      # Both participants are present simultaneously with Registered badge!
       assert has_element?(view, "#participants-list", "Bob Inscription")
       assert has_element?(view, "#participants-list", "Charlie Manuel")
       assert render(view) =~ "Inscrit"
@@ -162,14 +162,14 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/new")
 
-      # Email vide
+      # Empty email
       view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => ""})
 
       assert has_element?(view, "#participant-error-alert", "L'adresse email est obligatoire")
 
-      # Email invalide
+      # Invalid email
       view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "pas_un_email"})
@@ -180,7 +180,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
                "Veuillez saisir une adresse email valide"
              )
 
-      # Email non inscrit sur la plateforme
+      # Email not registered on platform
       view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "inconnu@test.com"})
@@ -204,17 +204,17 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/new")
 
-      # Ajout d'un ami via suggestions
+      # Add friend via suggestions
       view
       |> element("#add-user-btn-#{friend.id}")
       |> render_click()
 
-      # Ajout d'un ami inscrit par email manuellement
+      # Add registered friend manually by email
       view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "marc@test.com"})
 
-      # Soumission du formulaire (IF-31)
+      # Form submission (IF-31)
       {:error, {:live_redirect, %{to: show_path}}} =
         view
         |> form("#wallet-create-form",
@@ -228,10 +228,10 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert show_path =~ ~r"^/wallets/\d+$"
 
-      # Suivre la redirection vers la page de confirmation (IF-34)
+      # Follow redirect to confirmation page (IF-34)
       {:ok, show_view, html} = live(conn, show_path)
 
-      # Vérification de la confirmation et des informations affichées
+      # Verify confirmation and displayed information
       assert has_element?(show_view, "#wallet-name")
       assert element(show_view, "#wallet-name") |> render() =~ "Voyage à Rome"
       assert has_element?(show_view, "#wallet-currency-badge")
@@ -241,12 +241,12 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(show_view, "#wallet-description") |> render() =~
                "Dépenses du voyage entre amis"
 
-      # Vérification du propriétaire (IF-36)
+      # Verify owner (IF-36)
       assert has_element?(show_view, "#owner-name")
       assert element(show_view, "#owner-name") |> render() =~ "Sophie"
 
-      # Vérification des participants (IF-30, IF-37) :
-      # Le créateur est le membre initial, Lucas et Marc ont reçu une invitation en attente d'acceptation
+      # Verify participants (IF-30, IF-37):
+      # Creator is initial member, Lucas and Marc received pending invitations
       assert element(show_view, "#members-count") |> render() =~ "1"
       assert html =~ "Sophie"
       assert html =~ "Invitations envoyées"
@@ -288,14 +288,14 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Vacances 2026", currency: "EUR"})
       conn = authenticate_user(conn, owner)
 
-      # 1. Accès à la page d'édition
+      # 1. Access edit page
       {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/edit")
 
       assert has_element?(edit_view, "#wallet-edit-form")
       assert has_element?(edit_view, "#wallet-name-input")
       assert has_element?(edit_view, "#submit-edit-wallet-btn")
 
-      # 2. Soumission des modifications
+      # 2. Submit modifications
       {:error, {:live_redirect, %{to: show_path}}} =
         edit_view
         |> form("#wallet-edit-form",
@@ -305,7 +305,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert show_path == ~p"/wallets/#{wallet.id}"
 
-      # 3. Vérification de la mise à jour effective
+      # 3. Verify effective update
       {:ok, show_view, _html} = live(conn, show_path)
       assert element(show_view, "#wallet-name") |> render() =~ "Vacances Espagne 2026"
       assert element(show_view, "#wallet-currency-badge") |> render() =~ "USD"
@@ -318,7 +318,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Privé", currency: "EUR"})
       conn = authenticate_user(conn, other)
 
-      # Tentative d'accès à l'édition
+      # Attempt to access edit page
       {:error, {:live_redirect, %{to: redirect_to, flash: flash}}} =
         live(conn, ~p"/wallets/#{wallet.id}/edit")
 
@@ -336,13 +336,13 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       {:ok, wallet} =
         Wallets.create_wallet(owner, %{name: "Groupe"}, [%{name: "Membre", user_id: other.id}])
 
-      # Vue par le propriétaire
+      # View by owner
       owner_conn = authenticate_user(conn, owner)
       {:ok, owner_view, _html} = live(owner_conn, ~p"/wallets/#{wallet.id}")
       assert has_element?(owner_view, "#edit-wallet-btn")
       assert has_element?(owner_view, "#delete-wallet-btn")
 
-      # Vue par le membre non-propriétaire
+      # View by non-owner member
       other_conn = authenticate_user(conn, other)
       {:ok, other_view, _html} = live(other_conn, ~p"/wallets/#{wallet.id}")
       refute has_element?(other_view, "#edit-wallet-btn")
@@ -385,7 +385,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/edit")
 
-      # 1. Envoi d'une invitation à un utilisateur inscrit depuis les suggestions (IF-38, IF-40, IF-42, IF-43)
+      # 1. Send invitation to registered user from suggestions (IF-38, IF-40, IF-42, IF-43)
       assert has_element?(edit_view, "#add-user-btn-#{registered_user.id}")
 
       edit_view
@@ -397,7 +397,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(edit_view) =~ "Inscrit Nouveau"
       assert render(edit_view) =~ "Invitation envoyée"
 
-      # 2. Envoi d'une invitation manuellement par email (IF-39)
+      # 2. Send invitation manually by email (IF-39)
       edit_view
       |> element("#add-custom-participant-btn")
       |> render_click(%{"email" => "manuel@test.com"})
@@ -405,7 +405,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(edit_view) =~ "Invitation envoyée avec succès à Ami Manuel"
       assert render(edit_view) =~ "Ami Manuel"
 
-      # 3. Annulation d'une invitation en attente
+      # 3. Cancel pending invitation
       [invitation | _] = Wallets.list_pending_invitations_for_wallet(wallet.id)
 
       edit_view
@@ -414,7 +414,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert render(edit_view) =~ "invitation a été annulée"
 
-      # 4. Retrait d'un membre déjà actif
+      # 4. Remove active member
       [_, registered_member | _] = Wallets.get_wallet!(wallet.id).members
 
       edit_view
@@ -446,7 +446,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
         |> render_click()
 
       assert index_path == ~p"/wallets"
-      # L'utilisateur ne fait plus partie des membres
+      # User is no longer part of members
       wallet_members = Wallets.get_wallet!(wallet.id).members
       refute Enum.any?(wallet_members, &(&1.user_id == member_user.id))
     end
@@ -466,13 +466,13 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets")
 
-      # 1. Vérification de l'affichage de l'invitation reçue (IF-44)
+      # 1. Verify display of received invitation (IF-44)
       assert has_element?(view, "#pending-invitations-section")
       assert has_element?(view, "#invitation-card-#{invitation.id}")
       assert render(view) =~ "Festival 2026"
       assert render(view) =~ "Organisateur"
 
-      # 2. Clic sur Accepter (IF-44, IF-45)
+      # 2. Click Accept (IF-44, IF-45)
       view
       |> element("#accept-invitation-btn-#{invitation.id}")
       |> render_click()
@@ -480,11 +480,11 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(view) =~ "Vous avez rejoint le porte-monnaie avec succès"
       refute has_element?(view, "#invitation-card-#{invitation.id}")
 
-      # Le porte-monnaie apparaît désormais dans ses porte-monnaies
+      # The wallet now appears in user's wallets
       assert has_element?(view, "#wallet-card-#{wallet.id}")
       assert render(view) =~ "Festival 2026"
 
-      # L'utilisateur est bien enregistré en base comme membre du groupe (IF-45)
+      # User is persisted in database as group member (IF-45)
       wallet_members = Wallets.get_wallet!(wallet.id).members
       assert Enum.any?(wallet_members, &(&1.user_id == invitee.id))
     end
@@ -503,7 +503,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert has_element?(view, "#invitation-card-#{invitation.id}")
 
-      # Clic sur Refuser
+      # Click Decline
       view
       |> element("#decline-invitation-btn-#{invitation.id}")
       |> render_click()
@@ -512,7 +512,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#invitation-card-#{invitation.id}")
       refute has_element?(view, "#wallet-card-#{wallet.id}")
 
-      # N'est pas ajouté comme membre
+      # Is not added as member
       wallet_members = Wallets.get_wallet!(wallet.id).members
       refute Enum.any?(wallet_members, &(&1.user_id == invitee.id))
     end
@@ -527,10 +527,10 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       {:ok, invitation} =
         Wallets.create_invitation(owner, wallet, %{email: "paul@test.com"})
 
-      # L'invité décline
+      # Invitee declines
       {:ok, _} = Wallets.decline_invitation(invitee, invitation.id)
 
-      # Le propriétaire consulte la page d'édition
+      # Owner views edit page
       conn = authenticate_user(conn, owner)
       {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/edit")
 
@@ -538,7 +538,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(edit_view) =~ "Refusée"
       assert has_element?(edit_view, "#cancel-invitation-btn-#{invitation.id}")
 
-      # Le propriétaire consulte la page show
+      # Owner views show page
       {:ok, show_view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
       assert render(show_view) =~ "Paul Refus"
       assert render(show_view) =~ "Refusée"
@@ -557,12 +557,12 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       conn = authenticate_user(conn, user)
       {:ok, view, _html} = live(conn, ~p"/wallets")
 
-      # Présence de la cloche de notification et de son badge
+      # Presence of notification bell and badge
       assert has_element?(view, "#notifications-bell-btn")
       assert has_element?(view, "#notifications-count-badge")
       assert element(view, "#notifications-count-badge") |> render() =~ "1"
 
-      # Contenu du menu déroulant
+      # Dropdown menu content
       assert has_element?(view, "#notifications-dropdown-menu")
       assert render(view) =~ "Anniversaire"
       assert render(view) =~ "Amis Groupe"
@@ -580,7 +580,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
           %{name: "Bob", email: bob.email, user_id: bob.id}
         ])
 
-      # Alice paie 100€, Bob paie 0€. Total = 100€, part = 50€ -> Alice doit recevoir 50€
+      # Alice pays €100, Bob pays €0. Total = €100, share = €50 -> Alice should receive €50
       {:ok, _expense} =
         Expenses.create_expense(owner, wallet, %{
           title: "Forfaits ski",
@@ -590,13 +590,13 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       conn = authenticate_user(conn, owner)
       {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
 
-      # Vérification de la section des remboursements
+      # Verify settlements section
       assert has_element?(view, "#wallet-creditors-section")
       assert has_element?(view, "#wallet-creditors-list")
       assert has_element?(view, "#creditors-count-badge", "1 bénéficiaire(s)")
       refute has_element?(view, "#no-creditors-message")
 
-      # Alice doit être listée avec son montant net à recevoir
+      # Alice must be listed with net amount to receive
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       assert has_element?(view, "#creditor-item-#{alice_member.id}")
       assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "Alice"
@@ -606,7 +606,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~
                "Part due : 50.00 EUR"
 
-      # Bob est débiteur, il ne doit pas être affiché dans les comptes à rembourser
+      # Bob is debtor, must not be displayed in accounts to reimburse
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
       refute has_element?(view, "#creditor-item-#{bob_member.id}")
     end
@@ -661,7 +661,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       user = create_user()
       conn = authenticate_user(conn, user)
 
-      # Identifiant inexistant
+      # Non-existent identifier
       assert {:error, {:live_redirect, %{to: "/wallets", flash: %{"error" => msg}}}} =
                live(conn, ~p"/wallets/999999")
 
@@ -681,7 +681,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
           %{name: "Bob", email: bob.email, user_id: bob.id}
         ])
 
-      # Alice avance 100€, Bob 0€. Part = 50€ chacun. Bob doit 50€ à Alice.
+      # Alice fronts €100, Bob €0. Share = €50 each. Bob owes €50 to Alice.
       {:ok, _} =
         Expenses.create_expense(owner, wallet, %{
           title: "Hôtel",
@@ -691,7 +691,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       conn = authenticate_user(conn, owner)
       {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
 
-      # Vérification de la section des virements proposés
+      # Verify proposed settlements section
       assert has_element?(view, "#wallet-settlements-section")
       assert has_element?(view, "#wallet-settlements-list")
       assert has_element?(view, "#settlements-count-badge", "1 virement(s)")
@@ -709,15 +709,15 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert rendered_item =~ "50.00 EUR"
       assert rendered_item =~ "Virement conseillé"
 
-      # Le bouton n'est pas affiché tant que le porte-monnaie est ouvert (Étape 1)
+      # Button is not displayed while wallet is open (Step 1)
       refute has_element?(view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
 
-      # Une fois validé (Étape 2), le créancier (Alice) ne voit pas le bouton
+      # Once validated (Step 2), creditor (Alice) does not see button
       {:ok, _} = Wallets.validate_wallet(owner, wallet)
       {:ok, view_stage2, _html} = live(conn, ~p"/wallets/#{wallet.id}")
       refute has_element?(view_stage2, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
 
-      # Le débiteur (Bob) voit le bouton de règlement
+      # Debtor (Bob) sees settlement button
       bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
       {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
       assert has_element?(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
@@ -794,7 +794,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       badge_id = "#mock-settled-badge-#{bob_member.id}-#{alice_member.id}"
 
       # -----------------------------------------------------------------------
-      # ÉTAPE 1 : Déclarations en cours (statut Ouvert)
+      # STEP 1: Declarations in progress (Open status)
       # -----------------------------------------------------------------------
       assert has_element?(view, "#wallet-status-badge", "Ouvert")
       assert has_element?(view, "#wallet-lifecycle-stepper")
@@ -806,17 +806,17 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(view, "#settlement-progress-badge") |> render() =~
                "0 / 1 virement(s) réglé(s)"
 
-      # Exigence 1 : Aucun bouton de règlement n'est affiché quand le porte-monnaie est ouvert
+      # Requirement 1: No settlement button displayed when wallet is open
       refute has_element?(view, btn_id)
       refute has_element?(view, badge_id)
 
-      # Exigence 2 : Aucun mot "simul" dans l'interface
+      # Requirement 2: No word "simul" in the interface
       refute render(view) =~ "simul"
       assert render(view) =~ "Répartition des remboursements"
       assert render(view) =~ "Restant à régler"
 
       # -----------------------------------------------------------------------
-      # TRANSITION : Validation du porte-monnaie par le propriétaire -> Étape 2
+      # TRANSITION: Wallet validation by owner -> Step 2
       # -----------------------------------------------------------------------
       view |> element("#validate-wallet-btn") |> render_click()
 
@@ -826,35 +826,35 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#add-expense-btn")
 
       # -----------------------------------------------------------------------
-      # ÉTAPE 2 : Attente des virements (les boutons de virement apparaissent)
+      # STEP 2: Awaiting bank transfers (settlement buttons appear)
       # -----------------------------------------------------------------------
-      # Avant tout règlement : le bouton de réouverture est présent et aucun bouton clôturer n'existe
+      # Before any settlement: reopen button is present and no close button exists
       assert has_element?(view, "#reopen-wallet-btn")
       refute has_element?(view, "#close-wallet-btn")
 
-      # Alice (créancière) ne peut pas régler le virement
+      # Alice (creditor) cannot settle the transfer
       refute has_element?(view, btn_id)
 
-      # Bob (débiteur) se connecte et voit le bouton
+      # Bob (debtor) logs in and sees the button
       bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
       {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
       assert has_element?(bob_view, btn_id)
       assert element(bob_view, btn_id) |> render() =~ "Marquer comme réglé"
 
-      # Bob clique sur "Marquer comme réglé"
+      # Bob clicks "Marquer comme réglé"
       bob_view |> element(btn_id) |> render_click()
 
-      # Notification flash de clôture automatique définitive reçue par Bob
+      # Final automatic closure flash notification received by Bob
       assert render(bob_view) =~ "Dernier virement de 60.00 EUR de Bob vers Alice réglé !"
       assert render(bob_view) =~ "le porte-monnaie est désormais clôturé définitivement."
 
-      # Le bouton a disparu et est remplacé par le badge "Réglé"
+      # Button disappeared and is replaced by "Réglé" badge
       refute has_element?(bob_view, btn_id)
       assert has_element?(bob_view, badge_id)
       assert element(bob_view, badge_id) |> render() =~ "Réglé"
       refute element(bob_view, badge_id) |> render() =~ "Simulation"
 
-      # La répartition des remboursements est mise à jour (100% réglé)
+      # Settlement distribution is updated (100% settled)
       assert element(bob_view, "#settlement-progress-badge") |> render() =~
                "1 / 1 virement(s) réglé(s)"
 
@@ -864,25 +864,25 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(bob_view) =~ "Tous les remboursements ont été effectués avec succès !"
       assert render(bob_view) =~ "Le porte-monnaie est désormais définitivement clôturé"
 
-      # Synchronisation PubSub en temps réel sur la vue d'Alice
+      # Real-time PubSub synchronization on Alice's view
       assert has_element?(view, badge_id)
 
       assert element(view, "#settlement-progress-badge") |> render() =~
                "1 / 1 virement(s) réglé(s)"
 
       # -----------------------------------------------------------------------
-      # ÉTAPE 3 : Clôture automatique et stricte irréversibilité
+      # STEP 3: Automatic closure and strict irreversibility
       # -----------------------------------------------------------------------
-      # Le porte-monnaie est automatiquement passé au statut Clos
+      # Wallet automatically transitioned to Closed status
       assert has_element?(view, "#wallet-status-badge", "Clos")
       assert Wallets.get_wallet!(wallet.id).status == "closed"
 
-      # Aucun bouton de clôture manuelle, de réinitialisation ni de réouverture n'existe
+      # No manual close, reset, or reopen button exists
       refute has_element?(view, "#close-wallet-btn")
       refute has_element?(view, "#reset-mock-settlements-btn")
       refute has_element?(view, "#reopen-wallet-btn")
 
-      # Tentative de réouverture impossible
+      # Reopen attempt impossible
       render_click(view, "reopen_wallet", %{})
       assert render(view) =~ "La clôture de ce porte-monnaie est définitive."
     end
@@ -899,20 +899,20 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # Alice paie 90€ -> Bob doit 30€ et Charlie doit 30€
+      # Alice pays €90 -> Bob owes €30 and Charlie owes €30
       {:ok, _} = Expenses.create_expense(owner, wallet, %{title: "Repas commun", amount: "90.00"})
 
       conn = authenticate_user(conn, owner)
       {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
 
-      # Validation par le propriétaire -> Étape 2
+      # Validation by owner -> Step 2
       view |> element("#validate-wallet-btn") |> render_click()
       assert has_element?(view, "#wallet-status-badge", "Attente des virements")
 
-      # Avant tout virement : le bouton de réouverture est présent
+      # Before any transfer: reopen button is present
       assert has_element?(view, "#reopen-wallet-btn")
 
-      # On effectue 1 virement sur 2 (Bob règle à Alice)
+      # Perform 1 of 2 transfers (Bob settles to Alice)
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       charlie_member = Enum.find(wallet.members, &(&1.name == "Charlie"))
@@ -920,21 +920,21 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       bob_btn = "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}"
       charlie_btn = "#mock-settle-btn-#{charlie_member.id}-#{alice_member.id}"
 
-      # Bob effectue son virement
+      # Bob performs his transfer
       bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
       {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
       bob_view |> element(bob_btn) |> render_click()
 
-      # Après un premier virement : le virement est définitif, la réouverture disparaît de l'UI pour Alice
+      # After a first transfer: transfer is permanent, reopen disappears from UI for Alice
       refute has_element?(view, "#reopen-wallet-btn")
 
-      # Toute tentative d'envoi de l'événement de réouverture est refusée
+      # Any attempt to send reopen event is rejected
       render_click(view, "reopen_wallet", %{})
 
       assert render(view) =~
                "Impossible d&#39;annuler la validation : des virements ont déjà été effectués et sont définitifs."
 
-      # Le deuxième virement est effectué par Charlie -> Clôture automatique !
+      # Second transfer performed by Charlie -> Automatic closure!
       charlie_conn = authenticate_user(Phoenix.ConnTest.build_conn(), charlie)
       {:ok, charlie_view, _html} = live(charlie_conn, ~p"/wallets/#{wallet.id}")
       charlie_view |> element(charlie_btn) |> render_click()
@@ -977,7 +977,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
           %{name: "Bob", email: bob.email, user_id: bob.id}
         ])
 
-      # Alice paie 100€, Bob paie 0€. Total = 100€, part = 50€ -> Bob doit régler 50€
+      # Alice pays €100, Bob pays €0. Total = €100, share = €50 -> Bob must pay €50
       {:ok, _expense} =
         Expenses.create_expense(owner, wallet, %{
           title: "Location voiture",
@@ -987,13 +987,13 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       conn = authenticate_user(conn, owner)
       {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}")
 
-      # Vérification de la section des comptes débiteurs
+      # Verify debtor accounts section
       assert has_element?(view, "#wallet-debtors-section")
       assert has_element?(view, "#wallet-debtors-list")
       assert has_element?(view, "#debtors-count-badge", "1 débiteur(s)")
       refute has_element?(view, "#no-debtors-message")
 
-      # Bob doit être listé avec son montant net à payer
+      # Bob must be listed with net amount to pay
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
       assert has_element?(view, "#debtor-item-#{bob_member.id}")
       assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "Bob"
@@ -1002,7 +1002,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "Part due : 50.00 EUR"
       assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "À régler"
 
-      # Alice est créditrice, elle ne doit pas être affichée dans les comptes débiteurs
+      # Alice is creditor, must not be displayed in debtor accounts
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       refute has_element?(view, "#debtor-item-#{alice_member.id}")
     end
@@ -1065,8 +1065,8 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # Alice paie 90€, Bob paie 30€, Charlie paie 0€. Total = 120€, part = 40€ chacun
-      # Charlie doit 40€, Bob doit 10€, Alice est créditrice de 50€
+      # Alice pays €90, Bob pays €30, Charlie pays €0. Total = €120, share = €40 each
+      # Charlie owes €40, Bob owes €10, Alice is creditor of €50
       {:ok, _e1} =
         Expenses.create_expense(owner, wallet, %{title: "Hébergement", amount: "90.00"})
 
@@ -1104,7 +1104,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       conn = authenticate_user(conn, invitee)
 
-      # 1. Navigation depuis /wallets en cliquant sur l'onglet "Portes-monnaies invités"
+      # 1. Navigation from /wallets by clicking "Portes-monnaies invités" tab
       {:ok, view, _html} = live(conn, ~p"/wallets")
       assert has_element?(view, "#tab-invited-wallets")
 
@@ -1119,12 +1119,12 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(view) =~ "Weekend Londres"
       assert render(view) =~ "Marc Organisateur"
 
-      # 2. Accès direct via /wallets/invited
+      # 2. Direct access via /wallets/invited
       {:ok, view_direct, _html} = live(conn, ~p"/wallets/invited")
       assert has_element?(view_direct, "#invited-wallets-section")
       assert has_element?(view_direct, "#invited-wallet-card-#{wallet1.id}")
 
-      # 3. Acceptation d'une invitation depuis la carte
+      # 3. Accept invitation from card
       view_direct
       |> element("#accept-invited-wallet-btn-#{inv1.id}")
       |> render_click()
@@ -1152,12 +1152,12 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       conn = authenticate_user(conn, invitee)
       {:ok, view, _html} = live(conn, ~p"/wallets/invited")
 
-      # Toutes les invitations sont affichées (3)
+      # All invitations are displayed (3)
       assert has_element?(view, "#invited-wallet-card-#{w_pending.id}")
       assert has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
       assert has_element?(view, "#invited-wallet-card-#{w_declined.id}")
 
-      # Filtrer par "pending"
+      # Filter by "pending"
       view
       |> element("#filter-status-pending")
       |> render_click()
@@ -1166,7 +1166,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
       refute has_element?(view, "#invited-wallet-card-#{w_declined.id}")
 
-      # Filtrer par "accepted"
+      # Filter by "accepted"
       view
       |> element("#filter-status-accepted")
       |> render_click()
@@ -1175,7 +1175,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
       refute has_element?(view, "#invited-wallet-card-#{w_declined.id}")
 
-      # Filtrer par "declined"
+      # Filter by "declined"
       view
       |> element("#filter-status-declined")
       |> render_click()
@@ -1184,7 +1184,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
       assert has_element?(view, "#invited-wallet-card-#{w_declined.id}")
 
-      # Revenir à "all"
+      # Return to "all"
       view
       |> element("#filter-status-all")
       |> render_click()
@@ -1198,12 +1198,12 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       user = create_user(%{name: "Isolé", email: "isole@test.com"})
       conn = authenticate_user(conn, user)
 
-      # 1. Aucun porte-monnaie invité
+      # 1. No invited wallets
       {:ok, view, _html} = live(conn, ~p"/wallets/invited")
       assert has_element?(view, "#empty-invited-wallets-state")
       assert render(view) =~ "Aucun porte-monnaie invité pour le moment"
 
-      # 2. Utilisateur avec une seule invitation en attente
+      # 2. User with a single pending invitation
       owner = create_user()
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Groupe Seul"})
       {:ok, _inv} = Wallets.create_invitation(owner, wallet, %{email: user.email})
@@ -1212,7 +1212,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view2, "#empty-invited-wallets-state")
       assert has_element?(view2, "#invited-wallet-card-#{wallet.id}")
 
-      # Si on filtre sur un statut sans invitation ("declined"), l'état vide avec bouton reset s'affiche
+      # When filtering by status without invitations ("declined"), empty state with reset button is displayed
       view2
       |> element("#filter-status-declined")
       |> render_click()
@@ -1221,7 +1221,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(view2) =~ "Aucune invitation correspondante"
       assert has_element?(view2, "#reset-filter-btn")
 
-      # Clic sur Réinitialiser les filtres
+      # Click Reset filters
       view2
       |> element("#reset-filter-btn")
       |> render_click()
@@ -1240,14 +1240,14 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert has_element?(view, "#invited-wallet-card-#{wallet.id}")
 
-      # Déclenche une erreur de chargement
+      # Trigger loading error
       render_hook(view, "simulate_loading_error", %{})
 
       assert has_element?(view, "#invited-wallets-error-state")
       assert render(view) =~ "Erreur de chargement des portes-monnaies invités"
       assert has_element?(view, "#retry-loading-btn")
 
-      # Clic sur Réessayer pour récupérer de l'erreur
+      # Click Retry to recover from error
       view
       |> element("#retry-loading-btn")
       |> render_click()
@@ -1266,7 +1266,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       conn = authenticate_user(conn, user)
 
-      # 1. Navigation directe via /wallets/open
+      # 1. Direct navigation via /wallets/open
       {:ok, view, _html} = live(conn, ~p"/wallets/open")
 
       assert has_element?(view, "#page-main-heading", "Portes-monnaies ouverts")
@@ -1275,7 +1275,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(view, "#wallet-status-badge-#{open_wallet.id}") |> render() =~ "Ouvert"
       refute has_element?(view, "#wallet-card-#{closed_wallet.id}")
 
-      # 2. Filtrage interactif depuis /wallets via le bouton de filtre "Ouverts"
+      # 2. Interactive filtering from /wallets via "Ouverts" filter button
       {:ok, index_view, _html} = live(conn, ~p"/wallets")
       assert has_element?(index_view, "#wallet-filter-open")
 
@@ -1301,7 +1301,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#create-open-wallet-btn")
       assert has_element?(view, "#reset-open-wallet-filter-btn")
 
-      # Clic sur le bouton de réinitialisation
+      # Click reset button
       view
       |> element("#reset-open-wallet-filter-btn")
       |> render_click()
@@ -1319,7 +1319,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert has_element?(view, "#wallet-card-#{wallet.id}")
 
-      # Simulation de l'erreur
+      # Error simulation
       render_hook(view, "simulate_wallets_error", %{})
 
       assert has_element?(view, "#wallets-error-state")
@@ -1327,7 +1327,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#retry-load-wallets-btn")
       refute has_element?(view, "#wallet-card-#{wallet.id}")
 
-      # Réessayer
+      # Retry
       view
       |> element("#retry-load-wallets-btn")
       |> render_click()
@@ -1346,7 +1346,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       conn = authenticate_user(conn, user)
 
-      # 1. Navigation directe via /wallets/closed
+      # 1. Direct navigation via /wallets/closed
       {:ok, view, _html} = live(conn, ~p"/wallets/closed")
 
       assert has_element?(view, "#page-main-heading", "Portes-monnaies clos")
@@ -1355,7 +1355,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(view, "#wallet-status-badge-#{closed_wallet.id}") |> render() =~ "Clos"
       refute has_element?(view, "#wallet-card-#{open_wallet.id}")
 
-      # 2. Filtrage interactif depuis /wallets via le bouton de filtre "Clos"
+      # 2. Interactive filtering from /wallets via "Clos" filter button
       {:ok, index_view, _html} = live(conn, ~p"/wallets")
       assert has_element?(index_view, "#wallet-filter-closed")
 
@@ -1379,7 +1379,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert render(view) =~ "Aucun porte-monnaie clos pour le moment"
       assert has_element?(view, "#reset-closed-wallet-filter-btn")
 
-      # Clic sur le bouton de réinitialisation
+      # Click reset button
       view
       |> element("#reset-closed-wallet-filter-btn")
       |> render_click()

@@ -41,12 +41,12 @@ defmodule LesBonsComptesWeb.SignUpLiveTest do
 
     assert login_path =~ "/users/log_in?token="
 
-    # Vérification que l'utilisateur est bien enregistré en base de données avec mot de passe haché
+    # Verify that the user is persisted in the database with a hashed password
     assert [user] = Enum.filter(Accounts.list_users(), &(&1.email == "martin.dupont@test.fr"))
     assert user.name == "Martin Dupont"
     assert user.hashed_password != nil
 
-    # Suivre la redirection pour vérifier l'initialisation de la session (IF-27)
+    # Follow redirect to verify session initialization (IF-27)
     conn = get(conn, login_path)
     assert get_session(conn, :user_id) == user.id
     assert redirected_to(conn) == ~p"/"
@@ -64,7 +64,7 @@ defmodule LesBonsComptesWeb.SignUpLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/sign-up")
 
-    # Vérification à la frappe / blur (phx-change) : aucune vérification d'unicité en DB à ce stade
+    # Real-time change / blur verification (phx-change): no DB uniqueness check at this stage
     view
     |> form("#user-sign-up-form",
       user: %{
@@ -77,7 +77,7 @@ defmodule LesBonsComptesWeb.SignUpLiveTest do
 
     refute has_element?(view, "#email-uniqueness-error")
 
-    # Vérification à la soumission (phx-submit) : la contrainte DB se déclenche et affiche le message sous le bouton
+    # Submission verification (phx-submit): DB constraint triggers and displays error below button
     view
     |> form("#user-sign-up-form",
       user: %{

@@ -1,10 +1,10 @@
 defmodule LesBonsComptesWeb.SettlementJSON do
   @moduledoc """
-  Rendu JSON pour l'API des remboursements et virements (IF-84).
+  JSON view for the settlements and transfers API (IF-84).
   """
 
   @doc """
-  Rend la liste des virements optimisés ainsi que le résumé des créanciers et débiteurs.
+  Renders the list of optimized transfers along with creditors and debtors summary.
   """
   def index(%{
         wallet: wallet,
@@ -28,7 +28,7 @@ defmodule LesBonsComptesWeb.SettlementJSON do
   end
 
   @doc """
-  Rend la confirmation d'un virement effectué (IF-85).
+  Renders confirmation of a completed transfer (IF-85).
   """
   def mock(%{settlement: settlement}) do
     %{
@@ -39,7 +39,7 @@ defmodule LesBonsComptesWeb.SettlementJSON do
   end
 
   @doc """
-  Rend la liste de tous les virements effectués pour un porte-monnaie (IF-85).
+  Renders the list of all completed transfers for a wallet (IF-85).
   """
   def mock_all(%{settlements: settlements, wallet: wallet}) do
     %{

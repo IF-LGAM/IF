@@ -1,8 +1,8 @@
 defmodule LesBonsComptes.Expenses.Expense do
   @moduledoc """
-  Schéma représentant une dépense effectuée au sein d'un porte-monnaie commun.
-  Chaque dépense est reliée à un porte-monnaie, un compte dépenseur (membre payeur)
-  et à l'utilisateur qui l'a créée.
+  Schema representing an expense recorded within a shared wallet.
+  Each expense is linked to a wallet, a payer member account,
+  and the user who created it.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -24,8 +24,8 @@ defmodule LesBonsComptes.Expenses.Expense do
   end
 
   @doc """
-  Changeset pour la création ou modification d'une dépense.
-  Valide le titre, le montant strictement positif, la date et les associations.
+  Changeset for creating or modifying an expense.
+  Validates title, strictly positive amount, date, and associations.
   """
   def changeset(expense, attrs) do
     expense

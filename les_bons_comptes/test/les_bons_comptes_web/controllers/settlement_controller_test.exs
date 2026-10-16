@@ -30,7 +30,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
           %{name: "Charlie", email: charlie.email, user_id: charlie.id}
         ])
 
-      # Alice paie 90€ -> part 30€ chacun
+      # Alice pays €90 -> fair share of €30 each
       {:ok, _expense} =
         Expenses.create_expense(owner, wallet, %{
           title: "Appartement",
@@ -47,7 +47,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
       assert response["fair_share"] == "30.00"
       assert response["settlements_count"] == 2
 
-      # Les virements proposés
+      # Proposed settlements
       settlements = response["settlements"]
       assert length(settlements) == 2
 
@@ -60,7 +60,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
         assert s["currency"] == "EUR"
       end)
 
-      # Créanciers et débiteurs détaillés
+      # Detailed creditors and debtors
       assert length(response["creditors"]) == 1
       assert hd(response["creditors"])["name"] == "Alice"
       assert hd(response["creditors"])["amount_to_receive"] == "60.00"
@@ -169,7 +169,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
 
       {:ok, _} = Expenses.create_expense(owner, wallet, %{title: "Courses", amount: "60.00"})
 
-      # Validation du porte-monnaie (Étape 2)
+      # Wallet validation (Step 2)
       {:ok, _} = Wallets.validate_wallet(owner, wallet)
 
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
@@ -221,7 +221,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
       assert settlement["to_name"] == "Alice"
       assert settlement["amount"] == "40.00"
 
-      # Vérification de la clôture automatique
+      # Verify automatic closure
       assert Wallets.get_wallet!(wallet.id).status == "closed"
     end
 
@@ -240,7 +240,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
 
       [member] = wallet.members
 
-      # Même membre
+      # Same member
       conn1 =
         post(conn, ~p"/api/wallets/#{wallet.id}/settlements/mock", %{
           "from_id" => member.id,
@@ -251,7 +251,7 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
       assert json_response(conn1, 422)["error"] ==
                "L'émetteur et le récepteur doivent être distincts"
 
-      # Montant négatif ou nul
+      # Negative or zero amount
       conn2 =
         post(conn, ~p"/api/wallets/#{wallet.id}/settlements/mock", %{
           "from_id" => member.id,

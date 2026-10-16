@@ -64,7 +64,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       assert has_element?(view, "#expense-date-input")
       assert has_element?(view, "#expense-payer-select")
 
-      # Vérifie que le propriétaire Alice est pré-sélectionné par défaut
+      # Verify that owner Alice is preselected by default
       [owner_member | _] = wallet.members
 
       assert has_element?(
@@ -79,21 +79,21 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}/expenses/new")
 
-      # Test validation montant <= 0
+      # Test validation amount <= 0
       view
       |> form("#expense-form", expense: %{title: "Courses", amount: "0"})
       |> render_change()
 
       assert render(view) =~ "doit être supérieur à 0"
 
-      # Test validation montant négatif
+      # Test validation negative amount
       view
       |> form("#expense-form", expense: %{title: "Courses", amount: "-10"})
       |> render_change()
 
       assert render(view) =~ "doit être supérieur à 0"
 
-      # Test validation date dans le futur
+      # Test validation date in the future
       future_date_str = Date.to_iso8601(Date.add(Date.utc_today(), 2))
 
       view
@@ -123,12 +123,12 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
         |> render_submit()
         |> follow_redirect(conn, ~p"/wallets/#{wallet.id}")
 
-      # Confirmation affichée (IF-71)
+      # Confirmation displayed (IF-71)
       assert html =~ "Restaurant Paella"
       assert html =~ "85.50"
       assert html =~ "a été enregistrée avec succès"
 
-      # Affichage dans la liste des dépenses du porte-monnaie
+      # Display in wallet expenses list
       assert has_element?(show_view, "#wallet-expenses-list")
       assert has_element?(show_view, "#total-expenses-amount")
       assert render(show_view) =~ "85.50 EUR"
@@ -143,7 +143,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/wallets/#{wallet.id}/expenses/new")
 
-      # Bob est présélectionné par défaut
+      # Bob is preselected by default
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
 
       assert has_element?(
@@ -186,16 +186,16 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
          %{conn: conn} do
       %{creator: creator, bob: bob, wallet: wallet} = setup_wallet()
 
-      # Bob crée une dépense
+      # Bob creates an expense
       {:ok, expense} =
         Expenses.create_expense(bob, wallet, %{title: "Courses tapas", amount: "35.00"})
 
-      # 1. Bob voit le bouton de suppression sur sa dépense
+      # 1. Bob sees the delete button on his expense
       conn_bob = authenticate_user(conn, bob)
       {:ok, view_bob, _html} = live(conn_bob, ~p"/wallets/#{wallet.id}")
       assert has_element?(view_bob, "#delete-expense-btn-#{expense.id}")
 
-      # 2. Le propriétaire Alice voit aussi le bouton de suppression (IF-81)
+      # 2. Owner Alice also sees the delete button (IF-81)
       conn_alice = authenticate_user(conn, creator)
       {:ok, view_alice, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
       assert has_element?(view_alice, "#delete-expense-btn-#{expense.id}")
@@ -212,11 +212,11 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
           user_id: charlie.id
         })
 
-      # Bob crée une dépense
+      # Bob creates an expense
       {:ok, expense} =
         Expenses.create_expense(bob, wallet, %{title: "Cinéma", amount: "22.00"})
 
-      # Charlie (qui n'est ni le propriétaire Alice, ni le payeur/créateur Bob) ne voit pas le bouton
+      # Charlie (neither owner Alice nor payer/creator Bob) does not see the button
       conn_charlie = authenticate_user(conn, charlie)
       {:ok, view_charlie, _html} = live(conn_charlie, ~p"/wallets/#{wallet.id}")
 
@@ -238,13 +238,13 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       assert has_element?(view, "#expense-item-#{expense.id}")
       assert render(view) =~ "15.00 EUR"
 
-      # Déclenche la suppression
+      # Trigger deletion
       render_click(element(view, "#delete-expense-btn-#{expense.id}"))
 
-      # Notification flash affichée (IF-80)
+      # Flash notification displayed (IF-80)
       assert render(view) =~ "La dépense « Billets de bus » a été supprimée avec succès."
 
-      # La dépense a disparu de la liste
+      # Expense has disappeared from the list
       refute has_element?(view, "#expense-item-#{expense.id}")
       assert render(view) =~ "0.00 EUR"
       assert has_element?(view, "#no-expenses-message")
@@ -267,7 +267,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       conn_charlie = authenticate_user(conn, charlie)
       {:ok, view_charlie, _html} = live(conn_charlie, ~p"/wallets/#{wallet.id}")
 
-      # Envoi direct de l'événement delete_expense par Charlie
+      # Direct emission of delete_expense event by Charlie
       render_click(view_charlie, "delete_expense", %{"id" => to_string(expense.id)})
 
       assert render(view_charlie) =~ "pas autorisé à supprimer cette dépense"
@@ -282,7 +282,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       {:ok, expense} =
         Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
 
-      # Validation -> Étape 2
+      # Validation -> Step 2
       {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
 
       conn = authenticate_user(conn, creator)
@@ -290,7 +290,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
       refute has_element?(view, "#delete-expense-btn-#{expense.id}")
 
-      # Tentative directe de suppression par événement
+      # Direct deletion attempt via event
       render_click(view, "delete_expense", %{"id" => to_string(expense.id)})
 
       assert render(view) =~
@@ -313,26 +313,26 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
           user_id: charlie.id
         })
 
-      # Bob est le créateur et le payeur
+      # Bob is creator and payer
       {:ok, expense1} =
         Expenses.create_expense(bob, wallet, %{title: "Dépense Bob", amount: "20.00"})
 
-      # Bob voit le bouton d'édition
+      # Bob sees the edit button
       conn_bob = authenticate_user(conn, bob)
       {:ok, view_bob, _html} = live(conn_bob, ~p"/wallets/#{wallet.id}")
       assert has_element?(view_bob, "#edit-expense-btn-#{expense1.id}")
 
-      # Charlie ne voit pas le bouton d'édition
+      # Charlie does not see the edit button
       conn_charlie = authenticate_user(conn, charlie)
       {:ok, view_charlie, _html} = live(conn_charlie, ~p"/wallets/#{wallet.id}")
       refute has_element?(view_charlie, "#edit-expense-btn-#{expense1.id}")
 
-      # Alice (créatrice du wallet mais pas auteur/payeur de cette dépense) ne voit pas le bouton
+      # Alice (wallet creator but not author/payer of this expense) does not see the button
       conn_alice = authenticate_user(conn, creator)
       {:ok, view_alice, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
       refute has_element?(view_alice, "#edit-expense-btn-#{expense1.id}")
 
-      # Cas où l'auteur et le payeur sont distincts : Alice ajoute pour Bob
+      # Case where author and payer differ: Alice adds on behalf of Bob
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
 
       {:ok, expense2} =
@@ -342,11 +342,11 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
           payer_id: bob_member.id
         })
 
-      # Alice (qui a ajouté) voit le bouton d'édition
+      # Alice (who added) sees the edit button
       {:ok, view_alice2, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
       assert has_element?(view_alice2, "#edit-expense-btn-#{expense2.id}")
 
-      # Bob (qui est le compte payeur) voit aussi le bouton d'édition
+      # Bob (payer account) also sees the edit button
       {:ok, view_bob2, _html} = live(conn_bob, ~p"/wallets/#{wallet.id}")
       assert has_element?(view_bob2, "#edit-expense-btn-#{expense2.id}")
     end
@@ -376,7 +376,7 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       assert has_element?(edit_view, "#expense-form")
       assert has_element?(edit_view, "#expense-title-input[value='Ancien titre']")
 
-      # Modification et soumission
+      # Edit and submit
       edit_view
       |> form("#expense-form", expense: %{title: "Nouveau titre", amount: "55.00"})
       |> render_submit()

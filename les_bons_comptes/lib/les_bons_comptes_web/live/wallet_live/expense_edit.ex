@@ -1,8 +1,8 @@
 defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
   @moduledoc """
-  LiveView pour modifier une dépense existante dans un porte-monnaie.
-  Autorisé uniquement en phase de déclaration ("open") pour la personne ayant ajouté
-  la dépense ou pour le participant ayant réalisé la dépense.
+  LiveView for editing an existing expense in a wallet.
+  Allowed only during the declaration stage ("open") for the person who added
+  the expense or for the participant who paid for it.
   """
   use LesBonsComptesWeb, :live_view
 
@@ -127,7 +127,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-2xl mx-auto space-y-6">
-        <%!-- Fil d'Ariane & Bouton retour --%>
+        <%!-- Breadcrumb & back button --%>
         <div class="flex items-center justify-between">
           <.link
             navigate={~p"/wallets/#{@wallet.id}"}
@@ -142,7 +142,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
           </span>
         </div>
 
-        <%!-- En-tête de la page --%>
+        <%!-- Page Header --%>
         <div class="space-y-1">
           <h1 class="text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-2">
             <.icon name="hero-pencil-square" class="size-8 text-primary" />
@@ -153,7 +153,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
           </p>
         </div>
 
-        <%!-- Formulaire de modification --%>
+        <%!-- Edit Form --%>
         <div class="card bg-base-100 shadow-xl border border-base-200">
           <div class="card-body p-6 sm:p-8">
             <.form
@@ -163,7 +163,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
               phx-submit="save"
               class="space-y-6"
             >
-              <%!-- Titre de la dépense --%>
+              <%!-- Expense Title --%>
               <.input
                 field={@form[:title]}
                 id="expense-title-input"
@@ -173,7 +173,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
                 required
               />
 
-              <%!-- Montant et Devise --%>
+              <%!-- Amount and Currency --%>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <.input
@@ -188,7 +188,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
                   />
                 </div>
 
-                <%!-- Date de la dépense --%>
+                <%!-- Expense Date --%>
                 <div>
                   <.input
                     field={@form[:date]}
@@ -201,7 +201,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
                 </div>
               </div>
 
-              <%!-- Sélection du compte dépenseur --%>
+              <%!-- Payer selection --%>
               <div class="bg-base-200/40 rounded-xl p-4 border border-base-200 space-y-3">
                 <div class="flex items-center justify-between">
                   <label
@@ -225,7 +225,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
                 </p>
               </div>
 
-              <%!-- Description / Notes optionnelles --%>
+              <%!-- Description / Optional notes --%>
               <.input
                 field={@form[:description]}
                 id="expense-description-input"
@@ -234,7 +234,7 @@ defmodule LesBonsComptesWeb.WalletLive.ExpenseEdit do
                 placeholder="Ex : Ticket de caisse partagé avec le groupe"
               />
 
-              <%!-- Boutons d'action --%>
+              <%!-- Action buttons --%>
               <div class="divider my-2"></div>
 
               <div class="flex items-center justify-end gap-3 pt-2">

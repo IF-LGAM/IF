@@ -1,6 +1,6 @@
 defmodule LesBonsComptes.Expenses.Settlement do
   @moduledoc """
-  Schéma représentant un virement/remboursement validé et enregistré entre deux membres.
+  Schema representing a validated and recorded transfer/settlement between two members.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -26,7 +26,7 @@ defmodule LesBonsComptes.Expenses.Settlement do
   end
 
   @doc """
-  Changeset pour la persistance d'un remboursement.
+  Changeset for persisting a settlement.
   """
   def changeset(settlement, attrs) do
     settlement

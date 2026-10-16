@@ -1,8 +1,8 @@
 defmodule LesBonsComptes.Wallets.Wallet do
   @moduledoc """
-  Représente un porte-monnaie commun (Tricount).
-  Possède un créateur (propriétaire initial), un titre, une description optionnelle,
-  une devise et une liste de participants (membres).
+  Represents a shared wallet (Tricount).
+  Holds an initial owner/creator, title, optional description,
+  currency, and participant list (members).
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -26,7 +26,7 @@ defmodule LesBonsComptes.Wallets.Wallet do
   @statuses ~w(open pending_settlement closed)
 
   @doc """
-  Changeset pour la création ou modification d'un porte-monnaie commun.
+  Changeset for creating or modifying a shared wallet.
   """
   def changeset(wallet, attrs) do
     wallet
@@ -52,34 +52,34 @@ defmodule LesBonsComptes.Wallets.Wallet do
   ]
 
   @doc """
-  Retourne la liste des devises supportées.
+  Returns the list of supported currencies.
   """
   def supported_currencies, do: @currencies
 
   @doc """
-  Retourne les options de devise formatées pour les select HTML.
+  Returns currency options formatted for HTML selects.
   """
   def currency_options, do: @currency_options
 
   @doc """
-  Retourne la liste des statuts supportés.
+  Returns the list of supported statuses.
   """
   def supported_statuses, do: @statuses
 
   @doc """
-  Indique si le porte-monnaie est clos (Étape 3 : Clôturé).
+  Indicates whether the wallet is closed (Step 3: Closed).
   """
   def closed?(%__MODULE__{status: "closed"}), do: true
   def closed?(_), do: false
 
   @doc """
-  Indique si le porte-monnaie est en attente de virements (Étape 2).
+  Indicates whether the wallet is pending settlement (Step 2).
   """
   def pending_settlement?(%__MODULE__{status: "pending_settlement"}), do: true
   def pending_settlement?(_), do: false
 
   @doc """
-  Indique si le porte-monnaie est ouvert aux déclarations (Étape 1).
+  Indicates whether the wallet is open for declarations (Step 1).
   """
   def open?(%__MODULE__{status: "open"}), do: true
 
@@ -90,22 +90,22 @@ defmodule LesBonsComptes.Wallets.Wallet do
   def open?(_), do: false
 
   @doc """
-  Retourne le numéro d'étape actuel (1, 2 ou 3).
+  Returns the current step number (1, 2, or 3).
   """
   def step_number(%__MODULE__{status: "pending_settlement"}), do: 2
   def step_number(%__MODULE__{status: "closed"}), do: 3
   def step_number(_), do: 1
 
   @doc """
-  Retourne le libellé utilisateur de l'étape courante.
+  Returns the user-facing label for the current step.
   """
   def status_label(%__MODULE__{status: "pending_settlement"}), do: "Attente des virements"
   def status_label(%__MODULE__{status: "closed"}), do: "Clôturé"
   def status_label(_), do: "Déclarations en cours"
 
   @doc """
-  Indique si le porte-monnaie peut être rouvert vers l'étape de déclarations.
-  La clôture étant définitive, un porte-monnaie clos ne peut jamais être rouvert.
+  Indicates whether the wallet can be reopened to the declarations step.
+  Closure being permanent, a closed wallet can never be reopened.
   """
   def reopenable?(%__MODULE__{status: "closed"}), do: false
   def reopenable?(%__MODULE__{status: "pending_settlement"}), do: true
