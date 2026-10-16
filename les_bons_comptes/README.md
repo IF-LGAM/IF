@@ -164,7 +164,7 @@ docker compose exec web mix ecto.migrate
 
 ### Preconfigured Seed & Large-Scale Demo Dataset (IF-10)
 
-The application includes an extensive dataset generator (`LesBonsComptes.DataSeeder`) designed to demonstrate high volume ("Think HUGE") and real-life scenarios with **54 registered users, 42 wallets, 165+ realistic expenses, multiple currencies, invitations in all states, and settlements across all lifecycle stages**.
+The application includes an extensive dataset generator (`LesBonsComptes.DataSeeder`) designed to demonstrate high volume ("Think HUGE") and real-life scenarios with **60 registered users, 130 wallets (80 open, 24 pending transfers, 26 closed), 440+ realistic expenses, multiple currencies, invitations in all states, and 56 settlements**.
 
 #### Running the Dataset Seeder
 
@@ -183,18 +183,18 @@ docker compose exec web mix data.seed --no-reset
 
 #### Primary Demo Account: `admin@exemple.com`
 
-The `admin@exemple.com` account is deliberately configured as the focal point for live presentations, covering every functional feature of the platform:
+The `admin@exemple.com` account is deliberately configured as the focal point for live presentations, covering every functional feature of the platform across 25+ direct wallets:
 
 | Demo Feature | Corresponding Wallet / Location | What to Observe / Demonstrate |
 | :--- | :--- | :--- |
-| **Pending Invitations** | Notification Bell (Header) & [Invited Tab](http://localhost:4000/wallets/invited) | Red notification badge count; accept or decline invitations from Hugo & Julie |
-| **Active Spending** | *Coloc Rue des Lilas 2026* | Add/edit/delete expenses, view real-time creditors/debtors balance cards |
-| **Multi-Currency** | *Roadtrip Ouest Américain (USD)* & *Séjour Londres & Tech (GBP)* | Automatic currency symbol formatting and isolated currency calculations |
+| **Pending Invitations** | Notification Bell (Header) & [Invited Tab](http://localhost:4000/wallets/invited) | Red notification badge count; accept or decline invitations from Hugo, Julie, Sophie, etc. |
+| **Active Spending** | *Coloc Voltaire 2026* & *Vacances en Grèce* | Add/edit/delete expenses, view real-time creditors/debtors balance cards |
+| **Multi-Currency** | *Roadtrip Côte Ouest (USD)*, *Séjour Londres (GBP)* & *Montréal (CAD)* | Automatic currency symbol formatting and isolated currency calculations |
 | **Owner Closure** | *Festival d'Avignon 2026* | Owner can click "Valider le porte-monnaie" to freeze declarations and calculate settlements |
-| **Debtor Settlement** | *Weekend Ski Les Arcs 2026* | Admin owes money and sees the interactive **"Marquer comme réglé"** button |
-| **Partial Settlements** | *Rando Tour du Mont-Blanc* | Progress bar showing partially settled bank transfers in pending state |
-| **Balanced Wallet** | *Projet Freelance & Co* | All members paid equal shares; zero debt transfers required |
-| **Empty Wallet** | *Nouvel An 2027 à Vienne* | Clean empty-state with CTA to declare the first expense |
+| **Debtor Settlement** | *Weekend Ski aux 2 Alpes* & *City Break à Londres* | Admin owes money and sees the interactive **"Marquer comme réglé"** button |
+| **Partial Settlements** | *Trek Dolomites Alta Via 1* | Progress bar showing partially settled bank transfers in pending state |
+| **Balanced Wallet** | *Dîner Bistrot des Amis* | All members paid equal shares; zero debt transfers required |
+| **Empty Wallet** | *Nouveau Projet Hackathon IA* | Clean empty-state with CTA to declare the first expense |
 | **Closed & Reconciled** | [Closed Tab](http://localhost:4000/wallets/closed) | Fully settled wallets marked as archived and immutable |
 
 #### Demo User Credentials:
@@ -203,7 +203,7 @@ The `admin@exemple.com` account is deliberately configured as the focal point fo
   - **Email**: `admin@exemple.com`
   - **Password**: `admin123`
   - **Name**: `Admin`
-* **Additional 53 User Accounts** (e.g. `alice@exemple.com`, `bob@exemple.com`, `claire@exemple.com`...):
+* **Additional 59 User Accounts** (e.g. `alice@exemple.com`, `bob@exemple.com`, `claire@exemple.com`...):
   - **Password**: `password123`
 
 ---

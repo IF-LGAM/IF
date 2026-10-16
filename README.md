@@ -36,7 +36,7 @@ The complete Phoenix application is located in the [`les_bons_comptes/`](les_bon
 👉 **Refer to [`les_bons_comptes/README.md`](les_bons_comptes/README.md)** for comprehensive instructions:
 - Docker prerequisites and architecture
 - Step-by-step setup and launch commands
-- Large-scale realistic dataset generator (`mix data.seed`, IF-10) with 54+ users and 42+ wallets
+- Large-scale realistic dataset generator (`mix data.seed`, IF-10) with 60+ users and 130+ wallets
 - Complete REST API documentation
 - Running the test suite (183 tests, 0 failures)
 - Troubleshooting guide
