@@ -13,8 +13,14 @@ defmodule LesBonsComptes.Expenses.Settlement do
     belongs_to :wallet, LesBonsComptes.Wallets.Wallet
     belongs_to :from, LesBonsComptes.Wallets.WalletMember, foreign_key: :from_id
     belongs_to :to, LesBonsComptes.Wallets.WalletMember, foreign_key: :to_id
-    belongs_to :from_member, LesBonsComptes.Wallets.WalletMember, foreign_key: :from_id, define_field: false
-    belongs_to :to_member, LesBonsComptes.Wallets.WalletMember, foreign_key: :to_id, define_field: false
+
+    belongs_to :from_member, LesBonsComptes.Wallets.WalletMember,
+      foreign_key: :from_id,
+      define_field: false
+
+    belongs_to :to_member, LesBonsComptes.Wallets.WalletMember,
+      foreign_key: :to_id,
+      define_field: false
 
     timestamps(type: :utc_datetime)
   end

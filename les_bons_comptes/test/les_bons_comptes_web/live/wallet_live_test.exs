@@ -602,7 +602,9 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "Alice"
       assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "+ 50.00 EUR"
       assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "A payé 100.00 EUR"
-      assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~ "Part due : 50.00 EUR"
+
+      assert element(view, "#creditor-item-#{alice_member.id}") |> render() =~
+               "Part due : 50.00 EUR"
 
       # Bob est débiteur, il ne doit pas être affiché dans les comptes à rembourser
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
@@ -719,6 +721,7 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       bob_conn = authenticate_user(Phoenix.ConnTest.build_conn(), bob)
       {:ok, bob_view, _html} = live(bob_conn, ~p"/wallets/#{wallet.id}")
       assert has_element?(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}")
+
       assert element(bob_view, "#mock-settle-btn-#{bob_member.id}-#{alice_member.id}") |> render() =~
                "Marquer comme réglé"
     end
@@ -799,7 +802,9 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       assert has_element?(view, "#validate-wallet-btn")
       assert has_element?(view, "#add-expense-btn")
       assert has_element?(view, "#settlements-summary")
-      assert element(view, "#settlement-progress-badge") |> render() =~ "0 / 1 virement(s) réglé(s)"
+
+      assert element(view, "#settlement-progress-badge") |> render() =~
+               "0 / 1 virement(s) réglé(s)"
 
       # Exigence 1 : Aucun bouton de règlement n'est affiché quand le porte-monnaie est ouvert
       refute has_element?(view, btn_id)
@@ -850,7 +855,9 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute element(bob_view, badge_id) |> render() =~ "Simulation"
 
       # La répartition des remboursements est mise à jour (100% réglé)
-      assert element(bob_view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) réglé(s)"
+      assert element(bob_view, "#settlement-progress-badge") |> render() =~
+               "1 / 1 virement(s) réglé(s)"
+
       assert element(bob_view, "#summary-settled-amount") |> render() =~ "60.00 EUR"
       assert element(bob_view, "#summary-remaining-amount") |> render() =~ "0.00 EUR"
       assert has_element?(bob_view, "#all-settlements-completed-message")
@@ -859,7 +866,9 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       # Synchronisation PubSub en temps réel sur la vue d'Alice
       assert has_element?(view, badge_id)
-      assert element(view, "#settlement-progress-badge") |> render() =~ "1 / 1 virement(s) réglé(s)"
+
+      assert element(view, "#settlement-progress-badge") |> render() =~
+               "1 / 1 virement(s) réglé(s)"
 
       # -----------------------------------------------------------------------
       # ÉTAPE 3 : Clôture automatique et stricte irréversibilité
@@ -921,7 +930,9 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       # Toute tentative d'envoi de l'événement de réouverture est refusée
       render_click(view, "reopen_wallet", %{})
-      assert render(view) =~ "Impossible d&#39;annuler la validation : des virements ont déjà été effectués et sont définitifs."
+
+      assert render(view) =~
+               "Impossible d&#39;annuler la validation : des virements ont déjà été effectués et sont définitifs."
 
       # Le deuxième virement est effectué par Charlie -> Clôture automatique !
       charlie_conn = authenticate_user(Phoenix.ConnTest.build_conn(), charlie)
@@ -1041,7 +1052,9 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
       refute has_element?(view, "#wallet-debtors-list")
     end
 
-    test "affiche plusieurs comptes débiteurs triés par montant à payer décroissant", %{conn: conn} do
+    test "affiche plusieurs comptes débiteurs triés par montant à payer décroissant", %{
+      conn: conn
+    } do
       owner = create_user(%{name: "Alice", email: "alice_multi_deb@test.com"})
       bob = create_user(%{name: "Bob", email: "bob_multi_deb@test.com"})
       charlie = create_user(%{name: "Charlie", email: "charlie_multi_deb@test.com"})
@@ -1073,6 +1086,174 @@ defmodule LesBonsComptesWeb.WalletLiveTest do
 
       assert has_element?(view, "#debtor-item-#{bob_member.id}")
       assert element(view, "#debtor-item-#{bob_member.id}") |> render() =~ "- 10.00 EUR"
+    end
+  end
+
+  describe "Epic: Lister les portes-monnaies invités & US associées" do
+    test "affichage de la liste des portes-monnaies invités via l'onglet dédié et URL directe", %{
+      conn: conn
+    } do
+      owner = create_user(%{name: "Marc Organisateur"})
+      invitee = create_user(%{name: "Sophie Invitee", email: "sophie@test.com"})
+
+      {:ok, wallet1} = Wallets.create_wallet(owner, %{name: "Weekend Londres", currency: "GBP"})
+      {:ok, wallet2} = Wallets.create_wallet(owner, %{name: "Coloc Lille", currency: "EUR"})
+
+      {:ok, inv1} = Wallets.create_invitation(owner, wallet1, %{email: invitee.email})
+      {:ok, _inv2} = Wallets.create_invitation(owner, wallet2, %{email: invitee.email})
+
+      conn = authenticate_user(conn, invitee)
+
+      # 1. Navigation depuis /wallets en cliquant sur l'onglet "Portes-monnaies invités"
+      {:ok, view, _html} = live(conn, ~p"/wallets")
+      assert has_element?(view, "#tab-invited-wallets")
+
+      view
+      |> element("#tab-invited-wallets")
+      |> render_click()
+
+      assert has_element?(view, "#invited-wallets-section")
+      assert has_element?(view, "#invited-wallets-grid")
+      assert has_element?(view, "#invited-wallet-card-#{wallet1.id}")
+      assert has_element?(view, "#invited-wallet-card-#{wallet2.id}")
+      assert render(view) =~ "Weekend Londres"
+      assert render(view) =~ "Marc Organisateur"
+
+      # 2. Accès direct via /wallets/invited
+      {:ok, view_direct, _html} = live(conn, ~p"/wallets/invited")
+      assert has_element?(view_direct, "#invited-wallets-section")
+      assert has_element?(view_direct, "#invited-wallet-card-#{wallet1.id}")
+
+      # 3. Acceptation d'une invitation depuis la carte
+      view_direct
+      |> element("#accept-invited-wallet-btn-#{inv1.id}")
+      |> render_click()
+
+      assert render(view_direct) =~ "Vous avez rejoint le porte-monnaie avec succès"
+      assert has_element?(view_direct, "#view-invited-wallet-btn-#{wallet1.id}")
+    end
+
+    test "filtrage interactif des portes-monnaies par statut d'invitation", %{conn: conn} do
+      owner = create_user(%{name: "Organisateur Filtre"})
+      invitee = create_user(%{name: "Testeur Filtres", email: "filtres@test.com"})
+
+      {:ok, w_pending} = Wallets.create_wallet(owner, %{name: "Porte-monnaie En Attente"})
+      {:ok, w_accepted} = Wallets.create_wallet(owner, %{name: "Porte-monnaie Accepté"})
+      {:ok, w_declined} = Wallets.create_wallet(owner, %{name: "Porte-monnaie Refusé"})
+
+      {:ok, _inv1} = Wallets.create_invitation(owner, w_pending, %{email: invitee.email})
+
+      {:ok, inv2} = Wallets.create_invitation(owner, w_accepted, %{email: invitee.email})
+      {:ok, _} = Wallets.accept_invitation(invitee, inv2.id)
+
+      {:ok, inv3} = Wallets.create_invitation(owner, w_declined, %{email: invitee.email})
+      {:ok, _} = Wallets.decline_invitation(invitee, inv3.id)
+
+      conn = authenticate_user(conn, invitee)
+      {:ok, view, _html} = live(conn, ~p"/wallets/invited")
+
+      # Toutes les invitations sont affichées (3)
+      assert has_element?(view, "#invited-wallet-card-#{w_pending.id}")
+      assert has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
+      assert has_element?(view, "#invited-wallet-card-#{w_declined.id}")
+
+      # Filtrer par "pending"
+      view
+      |> element("#filter-status-pending")
+      |> render_click()
+
+      assert has_element?(view, "#invited-wallet-card-#{w_pending.id}")
+      refute has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
+      refute has_element?(view, "#invited-wallet-card-#{w_declined.id}")
+
+      # Filtrer par "accepted"
+      view
+      |> element("#filter-status-accepted")
+      |> render_click()
+
+      refute has_element?(view, "#invited-wallet-card-#{w_pending.id}")
+      assert has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
+      refute has_element?(view, "#invited-wallet-card-#{w_declined.id}")
+
+      # Filtrer par "declined"
+      view
+      |> element("#filter-status-declined")
+      |> render_click()
+
+      refute has_element?(view, "#invited-wallet-card-#{w_pending.id}")
+      refute has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
+      assert has_element?(view, "#invited-wallet-card-#{w_declined.id}")
+
+      # Revenir à "all"
+      view
+      |> element("#filter-status-all")
+      |> render_click()
+
+      assert has_element?(view, "#invited-wallet-card-#{w_pending.id}")
+      assert has_element?(view, "#invited-wallet-card-#{w_accepted.id}")
+      assert has_element?(view, "#invited-wallet-card-#{w_declined.id}")
+    end
+
+    test "gestion des états vides et réinitialisation des filtres", %{conn: conn} do
+      user = create_user(%{name: "Isolé", email: "isole@test.com"})
+      conn = authenticate_user(conn, user)
+
+      # 1. Aucun porte-monnaie invité
+      {:ok, view, _html} = live(conn, ~p"/wallets/invited")
+      assert has_element?(view, "#empty-invited-wallets-state")
+      assert render(view) =~ "Aucun porte-monnaie invité pour le moment"
+
+      # 2. Utilisateur avec une seule invitation en attente
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Groupe Seul"})
+      {:ok, _inv} = Wallets.create_invitation(owner, wallet, %{email: user.email})
+
+      {:ok, view2, _html} = live(conn, ~p"/wallets/invited")
+      refute has_element?(view2, "#empty-invited-wallets-state")
+      assert has_element?(view2, "#invited-wallet-card-#{wallet.id}")
+
+      # Si on filtre sur un statut sans invitation ("declined"), l'état vide avec bouton reset s'affiche
+      view2
+      |> element("#filter-status-declined")
+      |> render_click()
+
+      assert has_element?(view2, "#empty-invited-wallets-state")
+      assert render(view2) =~ "Aucune invitation correspondante"
+      assert has_element?(view2, "#reset-filter-btn")
+
+      # Clic sur Réinitialiser les filtres
+      view2
+      |> element("#reset-filter-btn")
+      |> render_click()
+
+      assert has_element?(view2, "#invited-wallet-card-#{wallet.id}")
+    end
+
+    test "gestion de l'état d'erreur de chargement et bouton de réessai", %{conn: conn} do
+      user = create_user(%{name: "Erreur User", email: "err_user@test.com"})
+      owner = create_user()
+      {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Groupe Réseau"})
+      {:ok, _inv} = Wallets.create_invitation(owner, wallet, %{email: user.email})
+
+      conn = authenticate_user(conn, user)
+      {:ok, view, _html} = live(conn, ~p"/wallets/invited")
+
+      assert has_element?(view, "#invited-wallet-card-#{wallet.id}")
+
+      # Déclenche une erreur de chargement
+      render_hook(view, "simulate_loading_error", %{})
+
+      assert has_element?(view, "#invited-wallets-error-state")
+      assert render(view) =~ "Erreur de chargement des portes-monnaies invités"
+      assert has_element?(view, "#retry-loading-btn")
+
+      # Clic sur Réessayer pour récupérer de l'erreur
+      view
+      |> element("#retry-loading-btn")
+      |> render_click()
+
+      refute has_element?(view, "#invited-wallets-error-state")
+      assert has_element?(view, "#invited-wallet-card-#{wallet.id}")
     end
   end
 end

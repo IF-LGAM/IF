@@ -38,6 +38,20 @@ defmodule LesBonsComptes.Wallets do
   defdelegate decline_invitation(user, invitation_or_id), to: Invitations, as: :decline
   defdelegate cancel_invitation(user, invitation_id), to: Invitations, as: :cancel
 
+  # Récupération et filtrage des portes-monnaies invités (Epic)
+  defdelegate list_invited_wallets_for_user(user_or_id, status \\ nil), to: Invitations
+
+  defdelegate list_invited_wallets(user_or_id, status \\ nil),
+    to: Invitations,
+    as: :list_invited_wallets_for_user
+
+  defdelegate fetch_invited_wallets(user_or_id, status \\ nil), to: Invitations
+  defdelegate filter_invited_wallets_by_status(query_or_list, status), to: Invitations
+
+  defdelegate list_invitations_for_user(user_or_id, status \\ nil),
+    to: Invitations,
+    as: :list_for_user
+
   # Données nécessaires au calcul des soldes, comptes créditeurs, débiteurs et règlements
   defdelegate get_balance_data(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate fetch_balance_data(wallet_or_id), to: LesBonsComptes.Expenses
@@ -51,11 +65,15 @@ defmodule LesBonsComptes.Wallets do
   defdelegate calculate_settlements(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate optimize_settlements(wallet_or_id), to: LesBonsComptes.Expenses
   defdelegate mock_settle_transfer(wallet_or_id, params), to: LesBonsComptes.Expenses
+
   defdelegate mock_settle_transfer(wallet_or_id, from_id, to_id, amount),
     to: LesBonsComptes.Expenses
+
   defdelegate mock_settle_all(wallet_or_id), to: LesBonsComptes.Expenses
+
   defdelegate settle_transfer(user, wallet_or_id, from_id, to_id, amount),
     to: LesBonsComptes.Expenses
+
   defdelegate list_settled_transfers(wallet_id), to: LesBonsComptes.Expenses
 
   @doc """
@@ -332,4 +350,3 @@ defmodule LesBonsComptes.Wallets do
   def reopenable?(%Wallet{} = wallet), do: Wallet.reopenable?(wallet)
   def reopenable?(_), do: false
 end
-

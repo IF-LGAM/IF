@@ -193,4 +193,125 @@ defmodule LesBonsComptes.Wallets.Invitations do
       {:error, :unauthorized}
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # US: Récupération et filtrage des portes-monnaies invités (Epic)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Récupère la liste des portes-monnaies auxquels un utilisateur a été invité.
+  Chaque porte-monnaie retourné possède son invitation associée préchargée dans le champ virtuel `:invitation`.
+  Permet de filtrer optionnellement par le statut de l'invitation (US: Filtrage des portes-monnaies par statut d'invitation).
+  """
+  def list_invited_wallets_for_user(user_or_id, status \\ nil)
+
+  def list_invited_wallets_for_user(%User{id: user_id}, status),
+    do: list_invited_wallets_for_user(user_id, status)
+
+  def list_invited_wallets_for_user(user_id, status) when is_integer(user_id) do
+    invitations_query =
+      from(i in WalletInvitation,
+        where: i.invitee_id == ^user_id,
+        order_by: [desc: i.inserted_at],
+        preload: [:inviter, :invitee, wallet: [:creator, :members]]
+      )
+
+    invitations_query = filter_invited_wallets_by_status(invitations_query, status)
+
+    invitations_query
+    |> Repo.all()
+    |> Enum.filter(&(&1.wallet != nil))
+    |> Enum.uniq_by(& &1.wallet_id)
+    |> Enum.map(fn invitation ->
+      wallet = invitation.wallet
+      %{wallet | invitation: invitation}
+    end)
+  end
+
+  @doc """
+  Récupère les portes-monnaies invités sous forme de résultat {:ok, wallets} ou {:error, reason}.
+  Facilite la gestion des erreurs de chargement dans l'interface (US: Gestion des erreurs de chargement).
+  """
+  def fetch_invited_wallets(user_or_id, status \\ nil) do
+    try do
+      {:ok, list_invited_wallets_for_user(user_or_id, status)}
+    rescue
+      e -> {:error, e}
+    end
+  end
+
+  @doc """
+  Filtre une requête Ecto ou une liste de portes-monnaies ou d'invitations par statut d'invitation.
+  Accepte 'all', 'pending', 'accepted', 'declined', 'cancelled' (sous forme d'atome ou de chaîne).
+  """
+  def filter_invited_wallets_by_status(query_or_list, status)
+
+  def filter_invited_wallets_by_status(%Ecto.Query{} = query, status) do
+    case normalize_status(status) do
+      :ignore -> query
+      :all -> query
+      {:unknown, _} -> from(i in query, where: false)
+      target -> from(i in query, where: i.status == ^target)
+    end
+  end
+
+  def filter_invited_wallets_by_status(list, status) when is_list(list) do
+    case normalize_status(status) do
+      :ignore ->
+        list
+
+      :all ->
+        list
+
+      {:unknown, _} ->
+        []
+
+      target ->
+        Enum.filter(list, fn
+          %Wallet{invitation: %WalletInvitation{status: s}} -> s == target
+          %WalletInvitation{status: s} -> s == target
+          %{invitation: %{status: s}} -> s == target
+          _ -> false
+        end)
+    end
+  end
+
+  @doc """
+  Liste toutes les invitations d'un utilisateur donné avec filtre optionnel sur le statut.
+  """
+  def list_for_user(user_or_id, status \\ nil)
+
+  def list_for_user(%User{id: user_id}, status), do: list_for_user(user_id, status)
+
+  def list_for_user(user_id, status) when is_integer(user_id) do
+    query =
+      from(i in WalletInvitation,
+        where: i.invitee_id == ^user_id,
+        order_by: [desc: i.inserted_at],
+        preload: [:wallet, :inviter, :invitee]
+      )
+
+    query
+    |> filter_invited_wallets_by_status(status)
+    |> Repo.all()
+  end
+
+  defp normalize_status(nil), do: :ignore
+  defp normalize_status(:all), do: :all
+  defp normalize_status("all"), do: :all
+  defp normalize_status(""), do: :all
+
+  defp normalize_status(status) when is_atom(status) do
+    normalize_status(Atom.to_string(status))
+  end
+
+  defp normalize_status(status) when is_binary(status) do
+    case String.downcase(String.trim(status)) do
+      "all" -> :all
+      valid when valid in ~w(pending accepted declined cancelled) -> valid
+      other -> {:unknown, other}
+    end
+  end
+
+  defp normalize_status(_), do: :ignore
 end

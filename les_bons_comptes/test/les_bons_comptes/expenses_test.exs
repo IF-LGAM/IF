@@ -240,7 +240,9 @@ defmodule LesBonsComptes.ExpensesTest do
 
     test "la suppression d'une dépense est strictement interdite hors phase de déclaration" do
       %{creator: creator, wallet: wallet} = setup_wallet_with_members()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
 
       # Étape 2 : en attente de virements
       {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
@@ -261,10 +263,15 @@ defmodule LesBonsComptes.ExpensesTest do
   describe "can_edit_expense?/2 et update_expense/3 (Modification des dépenses en phase de déclaration)" do
     test "la personne ayant ajouté la dépense peut la modifier" do
       %{creator: creator, wallet: wallet} = setup_wallet_with_members()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
 
       assert Expenses.can_edit_expense?(creator, expense)
-      assert {:ok, updated} = Expenses.update_expense(creator, expense, %{title: "Courses Bio", amount: "60.00"})
+
+      assert {:ok, updated} =
+               Expenses.update_expense(creator, expense, %{title: "Courses Bio", amount: "60.00"})
+
       assert updated.title == "Courses Bio"
       assert Decimal.equal?(updated.amount, Decimal.new("60.00"))
     end
@@ -296,21 +303,28 @@ defmodule LesBonsComptes.ExpensesTest do
           user_id: charlie_user.id
         })
 
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
 
       refute Expenses.can_edit_expense?(charlie_user, expense)
-      assert {:error, :unauthorized} = Expenses.update_expense(charlie_user, expense, %{title: "Fraude"})
+
+      assert {:error, :unauthorized} =
+               Expenses.update_expense(charlie_user, expense, %{title: "Fraude"})
     end
 
     test "la modification est strictement interdite hors phase de déclaration" do
       %{creator: creator, wallet: wallet} = setup_wallet_with_members()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "50.00"})
 
       {:ok, _pending_wallet} = Wallets.validate_wallet(creator, wallet)
       expense_pending = Expenses.get_expense!(expense.id)
 
       refute Expenses.can_edit_expense?(creator, expense_pending)
-      assert {:error, :wallet_closed} = Expenses.update_expense(creator, expense_pending, %{title: "Tentative"})
+
+      assert {:error, :wallet_closed} =
+               Expenses.update_expense(creator, expense_pending, %{title: "Tentative"})
     end
   end
 
@@ -830,7 +844,12 @@ defmodule LesBonsComptes.ExpensesTest do
       {:ok, pending_wallet} = Wallets.validate_wallet(creator, wallet)
 
       assert {:ok, pending_res} =
-               Expenses.mock_settle_transfer(pending_wallet, bob_member.id, alice_member.id, "40.00")
+               Expenses.mock_settle_transfer(
+                 pending_wallet,
+                 bob_member.id,
+                 alice_member.id,
+                 "40.00"
+               )
 
       assert pending_res.status == "settled"
       assert pending_res.settled == true
@@ -839,7 +858,12 @@ defmodule LesBonsComptes.ExpensesTest do
       {:ok, closed_wallet} = Wallets.close_wallet(creator, pending_wallet)
 
       assert {:ok, mock_res} =
-               Expenses.mock_settle_transfer(closed_wallet, bob_member.id, alice_member.id, "40.00")
+               Expenses.mock_settle_transfer(
+                 closed_wallet,
+                 bob_member.id,
+                 alice_member.id,
+                 "40.00"
+               )
 
       assert mock_res.status == "settled"
       assert mock_res.settled == true
@@ -868,7 +892,12 @@ defmodule LesBonsComptes.ExpensesTest do
 
       # Même membre
       assert {:error, :identical_members} =
-               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, alice_member.id, "10.00")
+               Expenses.mock_settle_transfer(
+                 closed_wallet,
+                 alice_member.id,
+                 alice_member.id,
+                 "10.00"
+               )
 
       # Membre inexistant
       assert {:error, :member_not_found} =
@@ -876,10 +905,20 @@ defmodule LesBonsComptes.ExpensesTest do
 
       # Montant invalide ou négatif
       assert {:error, :invalid_amount} =
-               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "-10.00")
+               Expenses.mock_settle_transfer(
+                 closed_wallet,
+                 alice_member.id,
+                 bob_member.id,
+                 "-10.00"
+               )
 
       assert {:error, :invalid_amount} =
-               Expenses.mock_settle_transfer(closed_wallet, alice_member.id, bob_member.id, "0.00")
+               Expenses.mock_settle_transfer(
+                 closed_wallet,
+                 alice_member.id,
+                 bob_member.id,
+                 "0.00"
+               )
     end
 
     test "mock_settle_all/1 simule tous les virements et clôture automatiquement le porte-monnaie" do
@@ -933,7 +972,8 @@ defmodule LesBonsComptes.ExpensesTest do
       dave = create_user(%{name: "Dave", email: "dave_settle@test.com"})
       {:ok, _invitation} = Wallets.create_invitation(creator, wallet, %{email: dave.email})
 
-      {:ok, _} = Expenses.create_expense(creator, wallet, %{title: "Dépense 100", amount: "100.00"})
+      {:ok, _} =
+        Expenses.create_expense(creator, wallet, %{title: "Dépense 100", amount: "100.00"})
 
       alice_member = Enum.find(wallet.members, &(&1.name == "Alice"))
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
@@ -947,11 +987,23 @@ defmodule LesBonsComptes.ExpensesTest do
 
       # Alice (la créancière) ne peut pas effectuer le virement de Bob
       assert {:error, :unauthorized} =
-               Expenses.settle_transfer(creator, pending_wallet, bob_member.id, alice_member.id, "50.00")
+               Expenses.settle_transfer(
+                 creator,
+                 pending_wallet,
+                 bob_member.id,
+                 alice_member.id,
+                 "50.00"
+               )
 
       # Bob (le débiteur) effectue son virement
       assert {:ok, res} =
-               Expenses.settle_transfer(bob, pending_wallet, bob_member.id, alice_member.id, "50.00")
+               Expenses.settle_transfer(
+                 bob,
+                 pending_wallet,
+                 bob_member.id,
+                 alice_member.id,
+                 "50.00"
+               )
 
       assert res.status == "settled"
       assert res.settled == true

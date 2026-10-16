@@ -36,6 +36,7 @@ defmodule LesBonsComptesWeb.Router do
     live_session :authenticated_user,
       on_mount: [{LesBonsComptesWeb.UserAuth, :ensure_authenticated}] do
       live "/wallets", WalletLive.Index, :index
+      live "/wallets/invited", WalletLive.Index, :invited
       live "/wallets/new", WalletLive.New, :new
       live "/wallets/:id", WalletLive.Show, :show
       live "/wallets/:id/edit", WalletLive.Edit, :edit

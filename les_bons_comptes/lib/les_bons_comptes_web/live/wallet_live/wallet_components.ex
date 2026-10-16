@@ -36,20 +36,21 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
   - closed : Étape 3 : Clos
   """
   attr :status, :string, default: "open"
+  attr :id, :string, default: "wallet-status-badge"
 
   def wallet_status_badge(assigns) do
     ~H"""
     <%= case @status do %>
       <% "closed" -> %>
-        <span id="wallet-status-badge" class="badge badge-neutral font-bold gap-1 shadow-sm">
+        <span id={@id} class="badge badge-neutral font-bold gap-1 shadow-sm">
           <.icon name="hero-check-badge" class="size-3" /> Clos
         </span>
       <% "pending_settlement" -> %>
-        <span id="wallet-status-badge" class="badge badge-warning font-bold gap-1 shadow-sm">
+        <span id={@id} class="badge badge-warning font-bold gap-1 shadow-sm">
           <.icon name="hero-clock" class="size-3" /> Attente des virements
         </span>
       <% _ -> %>
-        <span id="wallet-status-badge" class="badge badge-success font-bold gap-1 shadow-sm">
+        <span id={@id} class="badge badge-success font-bold gap-1 shadow-sm">
           <.icon name="hero-lock-open" class="size-3" /> Ouvert
         </span>
     <% end %>
@@ -75,31 +76,42 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     assigns = assign(assigns, :step, step)
 
     ~H"""
-    <div id="wallet-lifecycle-stepper" class="w-full bg-base-100 rounded-2xl p-4 border border-base-200 shadow-sm">
+    <div
+      id="wallet-lifecycle-stepper"
+      class="w-full bg-base-100 rounded-2xl p-4 border border-base-200 shadow-sm"
+    >
       <ul class="steps steps-horizontal w-full text-xs">
-        <li class={[
-          "step",
-          @step >= 1 && "step-primary font-semibold"
-        ]} data-content={if(@step > 1, do: "✓", else: "1")}>
+        <li
+          class={[
+            "step",
+            @step >= 1 && "step-primary font-semibold"
+          ]}
+          data-content={if(@step > 1, do: "✓", else: "1")}
+        >
           <span class="text-xs">1. Déclarations</span>
         </li>
-        <li class={[
-          "step",
-          @step >= 2 && "step-primary font-semibold"
-        ]} data-content={if(@step > 2, do: "✓", else: "2")}>
+        <li
+          class={[
+            "step",
+            @step >= 2 && "step-primary font-semibold"
+          ]}
+          data-content={if(@step > 2, do: "✓", else: "2")}
+        >
           <span class="text-xs">2. Attente des virements</span>
         </li>
-        <li class={[
-          "step",
-          @step >= 3 && "step-success font-semibold"
-        ]} data-content={if(@step >= 3, do: "✓", else: "3")}>
+        <li
+          class={[
+            "step",
+            @step >= 3 && "step-success font-semibold"
+          ]}
+          data-content={if(@step >= 3, do: "✓", else: "3")}
+        >
           <span class="text-xs">3. Clôture</span>
         </li>
       </ul>
     </div>
     """
   end
-
 
   @doc """
   Affiche le badge du statut d'une invitation.
@@ -594,7 +606,10 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
       |> assign(:all_completed, all_completed)
 
     ~H"""
-    <div id="settlements-summary" class="bg-base-200/50 rounded-xl p-4 border border-base-200 space-y-3">
+    <div
+      id="settlements-summary"
+      class="bg-base-200/50 rounded-xl p-4 border border-base-200 space-y-3"
+    >
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div class="space-y-0.5">
           <div class="text-xs font-semibold text-base-content/70 uppercase tracking-wider flex items-center gap-1.5">
@@ -659,4 +674,367 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     </div>
     """
   end
+
+  # ---------------------------------------------------------------------------
+  # US : Affichage, filtrage et états des portes-monnaies invités
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Barre de filtres par statut d'invitation (US: Filtrage des portes-monnaies par statut d'invitation).
+  """
+  attr :current_filter, :string, default: "all"
+  attr :counts, :map, default: %{}
+
+  def invitation_status_filter_bar(assigns) do
+    ~H"""
+    <div
+      id="invitation-filters"
+      class="flex flex-wrap items-center gap-2 p-1.5 bg-base-200/50 rounded-2xl border border-base-200"
+    >
+      <button
+        type="button"
+        id="filter-status-all"
+        phx-click="filter_invitations"
+        phx-value-status="all"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-xl font-medium transition-all gap-1.5",
+          if(@current_filter in ["all", nil, ""],
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost hover:bg-base-200"
+          )
+        ]}
+      >
+        <span>Toutes</span>
+        <span :if={Map.get(@counts, "all")} class="badge badge-xs opacity-80">
+          {Map.get(@counts, "all")}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        id="filter-status-pending"
+        phx-click="filter_invitations"
+        phx-value-status="pending"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-xl font-medium transition-all gap-1.5",
+          if(@current_filter == "pending",
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost hover:bg-base-200"
+          )
+        ]}
+      >
+        <.icon name="hero-clock" class="size-3.5" />
+        <span>En attente</span>
+        <span :if={Map.get(@counts, "pending")} class="badge badge-xs badge-warning font-semibold">
+          {Map.get(@counts, "pending")}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        id="filter-status-accepted"
+        phx-click="filter_invitations"
+        phx-value-status="accepted"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-xl font-medium transition-all gap-1.5",
+          if(@current_filter == "accepted",
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost hover:bg-base-200"
+          )
+        ]}
+      >
+        <.icon name="hero-check-circle" class="size-3.5" />
+        <span>Acceptées</span>
+        <span :if={Map.get(@counts, "accepted")} class="badge badge-xs badge-success font-semibold">
+          {Map.get(@counts, "accepted")}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        id="filter-status-declined"
+        phx-click="filter_invitations"
+        phx-value-status="declined"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-xl font-medium transition-all gap-1.5",
+          if(@current_filter == "declined",
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost hover:bg-base-200"
+          )
+        ]}
+      >
+        <.icon name="hero-x-mark" class="size-3.5" />
+        <span>Refusées</span>
+        <span :if={Map.get(@counts, "declined")} class="badge badge-xs badge-error font-semibold">
+          {Map.get(@counts, "declined")}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        id="filter-status-cancelled"
+        phx-click="filter_invitations"
+        phx-value-status="cancelled"
+        class={[
+          "btn btn-xs sm:btn-sm rounded-xl font-medium transition-all gap-1.5",
+          if(@current_filter == "cancelled",
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost hover:bg-base-200"
+          )
+        ]}
+      >
+        <.icon name="hero-no-symbol" class="size-3.5" />
+        <span>Annulées</span>
+        <span :if={Map.get(@counts, "cancelled")} class="badge badge-xs badge-ghost font-semibold">
+          {Map.get(@counts, "cancelled")}
+        </span>
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  Carte d'un porte-monnaie invité avec actions et informations d'invitation (US: Affichage de la liste des portes-monnaies invités).
+  """
+  attr :wallet, :map, required: true
+  attr :current_user, :map, required: true
+
+  def invited_wallet_card(assigns) do
+    invitation = assigns.wallet.invitation
+
+    assigns =
+      assigns
+      |> assign(:invitation, invitation)
+      |> assign(:status, invitation && invitation.status)
+
+    ~H"""
+    <div
+      id={"invited-wallet-card-#{@wallet.id}"}
+      class="card bg-base-100 shadow-md hover:shadow-lg border border-base-200 hover:border-primary/40 transition-all rounded-2xl flex flex-col justify-between"
+    >
+      <div class="card-body p-6 space-y-4">
+        <%!-- En-tête de la carte --%>
+        <div class="flex items-start justify-between gap-3">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-lg font-bold text-base-content hover:text-primary transition-colors">
+                {@wallet.name}
+              </h3>
+              <span class="badge badge-primary badge-sm font-semibold">
+                {@wallet.currency}
+              </span>
+            </div>
+            <p :if={@wallet.description} class="text-xs text-base-content/70 line-clamp-2 italic">
+              « {@wallet.description} »
+            </p>
+          </div>
+
+          <div class="flex flex-col items-end gap-1">
+            <.invitation_badge status={@status || "pending"} />
+            <.wallet_status_badge
+              status={@wallet.status}
+              id={"invited-wallet-status-badge-#{@wallet.id}"}
+            />
+          </div>
+        </div>
+
+        <div class="divider my-0"></div>
+
+        <%!-- Détails de l'invitation --%>
+        <div class="text-xs text-base-content/70 space-y-1.5 bg-base-200/40 p-3 rounded-xl border border-base-200">
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-base-content/60">
+              <.icon name="hero-user" class="size-3.5 text-primary" />
+              <span>Invité(e) par</span>
+            </span>
+            <span class="font-semibold text-base-content">
+              {@invitation && @invitation.inviter && @invitation.inviter.name}
+            </span>
+          </div>
+
+          <div :if={@invitation && @invitation.inserted_at} class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-base-content/60">
+              <.icon name="hero-calendar" class="size-3.5" />
+              <span>Date de réception</span>
+            </span>
+            <span class="text-base-content/80 font-medium">
+              {format_date(@invitation.inserted_at)}
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-base-content/60">
+              <.icon name="hero-user-group" class="size-3.5" />
+              <span>Participants</span>
+            </span>
+            <span class="text-base-content/80 font-medium">
+              {length(@wallet.members || [])} membre(s)
+            </span>
+          </div>
+        </div>
+
+        <%!-- Actions selon le statut de l'invitation --%>
+        <div class="pt-2 flex items-center justify-end gap-2 border-t border-base-200">
+          <%= cond do %>
+            <% @status == "pending" -> %>
+              <button
+                type="button"
+                id={"decline-invited-wallet-btn-#{@invitation.id}"}
+                phx-click="decline_invitation"
+                phx-value-id={@invitation.id}
+                class="btn btn-ghost btn-sm text-error hover:bg-error/10 gap-1.5"
+              >
+                <.icon name="hero-x-mark" class="size-4" />
+                <span>Refuser</span>
+              </button>
+
+              <button
+                type="button"
+                id={"accept-invited-wallet-btn-#{@invitation.id}"}
+                phx-click="accept_invitation"
+                phx-value-id={@invitation.id}
+                class="btn btn-primary btn-sm gap-1.5 shadow-sm"
+              >
+                <.icon name="hero-check" class="size-4" />
+                <span>Accepter l'invitation</span>
+              </button>
+            <% @status == "accepted" -> %>
+              <.link
+                navigate={~p"/wallets/#{@wallet.id}"}
+                id={"view-invited-wallet-btn-#{@wallet.id}"}
+                class="btn btn-outline btn-primary btn-sm gap-1.5 group"
+              >
+                <span>Accéder au compte</span>
+                <.icon
+                  name="hero-arrow-right"
+                  class="size-3.5 group-hover:translate-x-0.5 transition-transform"
+                />
+              </.link>
+            <% @status == "declined" -> %>
+              <span class="badge badge-ghost badge-sm text-error/80 gap-1">
+                <.icon name="hero-x-mark" class="size-3" /> Vous avez refusé cette invitation
+              </span>
+            <% @status == "cancelled" -> %>
+              <span class="badge badge-ghost badge-sm text-base-content/60 gap-1">
+                <.icon name="hero-no-symbol" class="size-3" /> Invitation annulée par l'organisateur
+              </span>
+            <% true -> %>
+              <span></span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  État vide pour la liste des portes-monnaies invités (US: Gestion des états vides).
+  """
+  attr :status_filter, :string, default: "all"
+
+  def empty_invited_wallets_state(assigns) do
+    ~H"""
+    <div
+      id="empty-invited-wallets-state"
+      class="card bg-base-100 shadow-xl border border-base-200 rounded-3xl"
+    >
+      <div class="card-body p-10 sm:p-14 text-center space-y-4">
+        <div class="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
+          <.icon name="hero-inbox" class="size-8" />
+        </div>
+
+        <div class="space-y-1.5 max-w-md mx-auto">
+          <%= if @status_filter in ["all", nil, ""] do %>
+            <h3 class="text-xl font-bold text-base-content">
+              Aucun porte-monnaie invité pour le moment
+            </h3>
+            <p class="text-sm text-base-content/60">
+              Vous n'avez reçu aucune invitation à rejoindre un porte-monnaie. Dès qu'un ami vous invitera à partager des dépenses, son invitation apparaîtra ici.
+            </p>
+          <% else %>
+            <h3 class="text-xl font-bold text-base-content">
+              Aucune invitation correspondante
+            </h3>
+            <p class="text-sm text-base-content/60">
+              Aucun porte-monnaie invité ne correspond au filtre de statut sélectionné (« {status_filter_label(
+                @status_filter
+              )} »).
+            </p>
+          <% end %>
+        </div>
+
+        <div class="pt-2 flex items-center justify-center gap-3">
+          <%= if @status_filter not in ["all", nil, ""] do %>
+            <button
+              type="button"
+              id="reset-filter-btn"
+              phx-click="filter_invitations"
+              phx-value-status="all"
+              class="btn btn-outline btn-primary btn-sm gap-1.5"
+            >
+              <.icon name="hero-arrow-path" class="size-4" />
+              <span>Réinitialiser les filtres</span>
+            </button>
+          <% else %>
+            <.link navigate={~p"/wallets/new"} class="btn btn-primary btn-sm gap-1.5">
+              <.icon name="hero-plus" class="size-4" />
+              <span>Créer mon propre porte-monnaie</span>
+            </.link>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  État d'erreur pour le chargement des portes-monnaies invités (US: Gestion des erreurs de chargement).
+  """
+  attr :error_message, :string,
+    default: "Une erreur est survenue lors de la récupération des données."
+
+  def invited_wallets_error_state(assigns) do
+    ~H"""
+    <div
+      id="invited-wallets-error-state"
+      class="card bg-error/10 border-2 border-error/30 text-error-content shadow-lg rounded-2xl p-6 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="size-10 rounded-xl bg-error text-error-content flex items-center justify-center shrink-0 shadow-sm">
+          <.icon name="hero-exclamation-triangle" class="size-6 text-white" />
+        </div>
+        <div class="space-y-1 flex-1">
+          <h3 class="text-base font-bold text-error">
+            Erreur de chargement des portes-monnaies invités
+          </h3>
+          <p class="text-xs text-base-content/80">
+            {@error_message}
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-error/20">
+        <button
+          type="button"
+          id="retry-loading-btn"
+          phx-click="retry_load_invited"
+          class="btn btn-error btn-sm text-white gap-2 shadow-sm"
+        >
+          <.icon name="hero-arrow-path" class="size-4" />
+          <span>Réessayer</span>
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  def format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%d/%m/%Y")
+  def format_date(%NaiveDateTime{} = ndt), do: Calendar.strftime(ndt, "%d/%m/%Y")
+  def format_date(_), do: ""
+
+  defp status_filter_label("pending"), do: "En attente"
+  defp status_filter_label("accepted"), do: "Acceptées"
+  defp status_filter_label("declined"), do: "Refusées"
+  defp status_filter_label("cancelled"), do: "Annulées"
+  defp status_filter_label(_), do: "Toutes"
 end
