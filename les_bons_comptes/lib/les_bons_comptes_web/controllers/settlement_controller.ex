@@ -86,7 +86,9 @@ defmodule LesBonsComptesWeb.SettlementController do
       {:error, :wallet_not_closed} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"})
+        |> json(%{
+          error: "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"
+        })
 
       {:error, :member_not_found} ->
         conn
@@ -122,7 +124,9 @@ defmodule LesBonsComptesWeb.SettlementController do
       {:error, :wallet_not_closed} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"})
+        |> json(%{
+          error: "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"
+        })
 
       {:error, _reason} ->
         conn

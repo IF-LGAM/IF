@@ -186,11 +186,17 @@ defmodule LesBonsComptes.WalletsTest do
       {:ok, wallet} = Wallets.create_wallet(owner, %{name: "Porte-monnaie"})
 
       {:ok, pending_wallet} = Wallets.validate_wallet(owner, wallet)
-      assert {:error, :wallet_closed} = Wallets.update_wallet(owner, pending_wallet, %{name: "Modif"})
+
+      assert {:error, :wallet_closed} =
+               Wallets.update_wallet(owner, pending_wallet, %{name: "Modif"})
+
       assert {:error, :wallet_closed} = Wallets.update_wallet(pending_wallet, %{name: "Modif"})
 
       {:ok, closed_wallet} = Wallets.close_wallet(owner, pending_wallet)
-      assert {:error, :wallet_closed} = Wallets.update_wallet(owner, closed_wallet, %{name: "Modif"})
+
+      assert {:error, :wallet_closed} =
+               Wallets.update_wallet(owner, closed_wallet, %{name: "Modif"})
+
       assert {:error, :wallet_closed} = Wallets.update_wallet(closed_wallet, %{name: "Modif"})
     end
   end
@@ -510,7 +516,9 @@ defmodule LesBonsComptes.WalletsTest do
         assert cs.valid?, "Le statut #{status} devrait être valide"
       end
 
-      invalid_changeset = Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "invalid_status"})
+      invalid_changeset =
+        Wallet.changeset(wallet, %{name: "Test", currency: "EUR", status: "invalid_status"})
+
       refute invalid_changeset.valid?
       assert "statut invalide" in errors_on(invalid_changeset).status
     end
@@ -525,6 +533,7 @@ defmodule LesBonsComptes.WalletsTest do
 
       # Création refusée
       other = create_user(%{email: "other_phase2@test.com"})
+
       assert {:error, :invitations_disabled} =
                Wallets.create_invitation(owner, pending_wallet, %{email: other.email})
 
@@ -545,6 +554,161 @@ defmodule LesBonsComptes.WalletsTest do
 
       assert Wallets.list_pending_invitations_for_wallet(wallet.id) == []
       assert_raise Ecto.NoResultsError, fn -> Wallets.get_invitation!(invitation.id) end
+    end
+  end
+
+  describe "Lister les portes-monnaies invités (Epic) & Filtrage (US)" do
+    test "list_invited_wallets_for_user/2 récupère les portes-monnaies invités avec l'invitation préchargée" do
+      owner = create_user(%{name: "Alice"})
+      invitee = create_user(%{name: "Bob", email: "bob@invited.test"})
+
+      {:ok, wallet1} = Wallets.create_wallet(owner, %{name: "Porte-monnaie 1", currency: "EUR"})
+      {:ok, wallet2} = Wallets.create_wallet(owner, %{name: "Porte-monnaie 2", currency: "USD"})
+
+      {:ok, inv1} = Wallets.create_invitation(owner, wallet1, %{email: invitee.email})
+      {:ok, _inv2} = Wallets.create_invitation(owner, wallet2, %{email: invitee.email})
+
+      invited_wallets = Wallets.list_invited_wallets_for_user(invitee.id)
+      assert length(invited_wallets) == 2
+
+      first = Enum.find(invited_wallets, &(&1.id == wallet1.id))
+      assert first != nil
+      assert first.name == "Porte-monnaie 1"
+      assert first.invitation != nil
+      assert first.invitation.id == inv1.id
+      assert first.invitation.status == "pending"
+      assert first.invitation.inviter.id == owner.id
+      assert first.creator.id == owner.id
+    end
+
+    test "filtrage des portes-monnaies invités par statut d'invitation (pending, accepted, declined, cancelled)" do
+      owner = create_user(%{name: "Owner Multi"})
+      invitee = create_user(%{name: "Invité Multi", email: "multi@invited.test"})
+
+      {:ok, w_pending} = Wallets.create_wallet(owner, %{name: "W Pending"})
+      {:ok, w_accepted} = Wallets.create_wallet(owner, %{name: "W Accepted"})
+      {:ok, w_declined} = Wallets.create_wallet(owner, %{name: "W Declined"})
+      {:ok, w_cancelled} = Wallets.create_wallet(owner, %{name: "W Cancelled"})
+
+      {:ok, _inv_p} = Wallets.create_invitation(owner, w_pending, %{email: invitee.email})
+
+      {:ok, inv_a} = Wallets.create_invitation(owner, w_accepted, %{email: invitee.email})
+      {:ok, _member} = Wallets.accept_invitation(invitee, inv_a.id)
+
+      {:ok, inv_d} = Wallets.create_invitation(owner, w_declined, %{email: invitee.email})
+      {:ok, _declined} = Wallets.decline_invitation(invitee, inv_d.id)
+
+      {:ok, inv_c} = Wallets.create_invitation(owner, w_cancelled, %{email: invitee.email})
+      {:ok, _cancelled} = Wallets.cancel_invitation(owner, inv_c.id)
+
+      # 1. Filtre par défaut ou "all" : tous les 4 sont présents
+      all_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "all")
+      assert length(all_wallets) == 4
+
+      # 2. Filtre "pending"
+      pending_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "pending")
+      assert length(pending_wallets) == 1
+      assert hd(pending_wallets).id == w_pending.id
+      assert hd(pending_wallets).invitation.status == "pending"
+
+      # 3. Filtre "accepted"
+      accepted_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "accepted")
+      assert length(accepted_wallets) == 1
+      assert hd(accepted_wallets).id == w_accepted.id
+      assert hd(accepted_wallets).invitation.status == "accepted"
+
+      # 4. Filtre "declined"
+      declined_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "declined")
+      assert length(declined_wallets) == 1
+      assert hd(declined_wallets).id == w_declined.id
+      assert hd(declined_wallets).invitation.status == "declined"
+
+      # 5. Filtre "cancelled"
+      cancelled_wallets = Wallets.list_invited_wallets_for_user(invitee.id, "cancelled")
+      assert length(cancelled_wallets) == 1
+      assert hd(cancelled_wallets).id == w_cancelled.id
+      assert hd(cancelled_wallets).invitation.status == "cancelled"
+
+      # 6. Test avec atomes (:pending, :accepted)
+      assert length(Wallets.list_invited_wallets_for_user(invitee, :pending)) == 1
+      assert length(Wallets.list_invited_wallets_for_user(invitee, :accepted)) == 1
+    end
+
+    test "filter_invited_wallets_by_status/2 filtre correctement les listes en mémoire" do
+      owner = create_user()
+      invitee = create_user(%{email: "filter_mem@test.com"})
+      {:ok, w1} = Wallets.create_wallet(owner, %{name: "Test 1"})
+      {:ok, _inv1} = Wallets.create_invitation(owner, w1, %{email: invitee.email})
+
+      wallets = Wallets.list_invited_wallets_for_user(invitee.id)
+      assert length(Wallets.filter_invited_wallets_by_status(wallets, "pending")) == 1
+      assert length(Wallets.filter_invited_wallets_by_status(wallets, "accepted")) == 0
+      assert length(Wallets.filter_invited_wallets_by_status(wallets, "all")) == 1
+      assert length(Wallets.filter_invited_wallets_by_status(wallets, "inconnu")) == 0
+    end
+
+    test "fetch_invited_wallets/2 retourne un tuple {:ok, wallets}" do
+      user = create_user()
+      assert {:ok, []} = Wallets.fetch_invited_wallets(user.id)
+    end
+  end
+
+  describe "Lister les portes-monnaies ouverts et clos (Epics) & Filtrage (US)" do
+    test "list_open_wallets_for_user/1 et fetch_open_wallets/1 récupèrent uniquement les comptes ouverts" do
+      user = create_user()
+
+      {:ok, open_wallet1} = Wallets.create_wallet(user, %{name: "Open Wallet 1"})
+      {:ok, open_wallet2} = Wallets.create_wallet(user, %{name: "Open Wallet 2"})
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Closed Wallet"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      open_wallets = Wallets.list_open_wallets_for_user(user)
+      assert length(open_wallets) == 2
+      assert Enum.all?(open_wallets, &(&1.status == "open"))
+      assert Enum.any?(open_wallets, &(&1.id == open_wallet1.id))
+      assert Enum.any?(open_wallets, &(&1.id == open_wallet2.id))
+      refute Enum.any?(open_wallets, &(&1.id == closed_wallet.id))
+
+      assert {:ok, fetched_open} = Wallets.fetch_open_wallets(user.id)
+      assert length(fetched_open) == 2
+    end
+
+    test "list_closed_wallets_for_user/1 et fetch_closed_wallets/1 récupèrent uniquement les comptes clos" do
+      user = create_user()
+
+      {:ok, _open_wallet} = Wallets.create_wallet(user, %{name: "Open Wallet"})
+      {:ok, closed_wallet} = Wallets.create_wallet(user, %{name: "Closed Wallet"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_wallet)
+
+      closed_wallets = Wallets.list_closed_wallets_for_user(user)
+      assert length(closed_wallets) == 1
+      assert hd(closed_wallets).id == closed_wallet.id
+      assert hd(closed_wallets).status == "closed"
+
+      assert {:ok, fetched_closed} = Wallets.fetch_closed_wallets(user.id)
+      assert length(fetched_closed) == 1
+      assert hd(fetched_closed).id == closed_wallet.id
+    end
+
+    test "filter_wallets_by_status/2 filtre correctement les requêtes Ecto et les listes" do
+      user = create_user()
+      {:ok, _open_w} = Wallets.create_wallet(user, %{name: "Open W"})
+      {:ok, closed_w} = Wallets.create_wallet(user, %{name: "Closed W"})
+      {:ok, _closed} = Wallets.close_wallet(user, closed_w)
+
+      # 1. Requête / base de données
+      assert length(Wallets.list_wallets_for_user(user.id, "open")) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, "closed")) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, :open)) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, :closed)) == 1
+      assert length(Wallets.list_wallets_for_user(user.id, "all")) == 2
+
+      # 2. Liste en mémoire
+      all_wallets = Wallets.list_wallets_for_user(user.id)
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "open")) == 1
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "closed")) == 1
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "all")) == 2
+      assert length(Wallets.filter_wallets_by_status(all_wallets, "unknown")) == 0
     end
   end
 end

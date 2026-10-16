@@ -12,6 +12,7 @@ defmodule LesBonsComptes.Wallets.Wallet do
     field :description, :string
     field :currency, :string, default: "EUR"
     field :status, :string, default: "open"
+    field :invitation, :any, virtual: true
 
     belongs_to :creator, LesBonsComptes.Accounts.User, foreign_key: :creator_id
     has_many :members, LesBonsComptes.Wallets.WalletMember, on_delete: :delete_all
@@ -81,7 +82,10 @@ defmodule LesBonsComptes.Wallets.Wallet do
   Indique si le porte-monnaie est ouvert aux déclarations (Étape 1).
   """
   def open?(%__MODULE__{status: "open"}), do: true
-  def open?(%__MODULE__{status: status}) when status in ["pending_settlement", "closed"], do: false
+
+  def open?(%__MODULE__{status: status}) when status in ["pending_settlement", "closed"],
+    do: false
+
   def open?(%__MODULE__{}), do: true
   def open?(_), do: false
 

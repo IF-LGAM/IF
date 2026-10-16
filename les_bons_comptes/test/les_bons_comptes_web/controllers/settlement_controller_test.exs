@@ -151,7 +151,9 @@ defmodule LesBonsComptesWeb.SettlementControllerTest do
 
       conn = post(conn, ~p"/api/wallets/#{wallet.id}/settlements/mock", params)
       assert response = json_response(conn, 422)
-      assert response["error"] == "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"
+
+      assert response["error"] ==
+               "Le porte-monnaie doit être validé ou clos pour effectuer les remboursements"
     end
 
     test "retourne 200 si le porte-monnaie est validé (Étape 2) ou clos (Étape 3)", %{

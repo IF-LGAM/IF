@@ -61,25 +61,25 @@ defmodule LesBonsComptes.Expenses do
       true ->
         payer_id = resolve_payer_id(attrs[:payer_id] || attrs["payer_id"], user_member.id)
 
-      case validate_payer_in_wallet(wallet, payer_id, attrs) do
-        :ok ->
-          date = resolve_date(attrs[:date] || attrs["date"])
-          params = build_expense_params(attrs, wallet, user, payer_id, date)
+        case validate_payer_in_wallet(wallet, payer_id, attrs) do
+          :ok ->
+            date = resolve_date(attrs[:date] || attrs["date"])
+            params = build_expense_params(attrs, wallet, user, payer_id, date)
 
-          %Expense{}
-          |> Expense.changeset(params)
-          |> Repo.insert()
-          |> case do
-            {:ok, expense} ->
-              {:ok, Repo.preload(expense, [:payer, :created_by, :wallet])}
+            %Expense{}
+            |> Expense.changeset(params)
+            |> Repo.insert()
+            |> case do
+              {:ok, expense} ->
+                {:ok, Repo.preload(expense, [:payer, :created_by, :wallet])}
 
-            {:error, changeset} ->
-              {:error, changeset}
-          end
+              {:error, changeset} ->
+                {:error, changeset}
+            end
 
-        {:error, changeset} ->
-          {:error, changeset}
-      end
+          {:error, changeset} ->
+            {:error, changeset}
+        end
     end
   end
 
@@ -493,7 +493,9 @@ defmodule LesBonsComptes.Expenses do
 
     creditors =
       balances
-      |> Enum.filter(&(&1.type == :creditor and Decimal.gt?(&1.amount_to_receive, Decimal.new("0.00"))))
+      |> Enum.filter(
+        &(&1.type == :creditor and Decimal.gt?(&1.amount_to_receive, Decimal.new("0.00")))
+      )
       |> Enum.map(fn c ->
         %{
           id: c.member_id,
@@ -1001,4 +1003,3 @@ defmodule LesBonsComptes.Expenses do
 
   defp parse_settle_amount(_), do: {:error, :invalid_amount}
 end
-

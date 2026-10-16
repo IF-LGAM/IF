@@ -393,7 +393,6 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                         <.icon name="hero-check" class="size-4" />
                         <span>Valider les comptes</span>
                       </button>
-
                     <% "pending_settlement" -> %>
                       <%= if MapSet.size(@mock_settled_ids) == 0 do %>
                         <button
@@ -407,7 +406,6 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                           <span>Rouvrir</span>
                         </button>
                       <% end %>
-
                     <% "closed" -> %>
                       <%!-- Clôture définitive : aucun bouton de réouverture ni de clôture --%>
                   <% end %>
@@ -667,7 +665,10 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
               <div class="flex items-center gap-2">
                 <%= if @settlements != [] do %>
-                  <span id="settlements-count-badge" class="badge badge-primary badge-sm font-semibold">
+                  <span
+                    id="settlements-count-badge"
+                    class="badge badge-primary badge-sm font-semibold"
+                  >
                     {length(@settlements)} virement(s)
                   </span>
                 <% end %>
@@ -732,7 +733,9 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                   <.settlement_item
                     settlement={settlement}
                     currency={@wallet.currency}
-                    is_mock_settled={MapSet.member?(@mock_settled_ids, "#{settlement.from_id}->#{settlement.to_id}")}
+                    is_mock_settled={
+                      MapSet.member?(@mock_settled_ids, "#{settlement.from_id}->#{settlement.to_id}")
+                    }
                     status={@wallet.status}
                     is_closed={@wallet.status in ["pending_settlement", "closed"]}
                     current_user={@current_user}

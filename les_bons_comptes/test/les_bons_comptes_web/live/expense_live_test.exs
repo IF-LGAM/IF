@@ -274,9 +274,13 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       assert Expenses.get_expense!(expense.id) != nil
     end
 
-    test "masque le bouton de suppression et rejette la suppression hors phase de déclaration", %{conn: conn} do
+    test "masque le bouton de suppression et rejette la suppression hors phase de déclaration", %{
+      conn: conn
+    } do
       %{creator: creator, wallet: wallet} = setup_wallet()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
 
       # Validation -> Étape 2
       {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
@@ -288,13 +292,17 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
       # Tentative directe de suppression par événement
       render_click(view, "delete_expense", %{"id" => to_string(expense.id)})
-      assert render(view) =~ "Impossible de supprimer une dépense lorsque le porte-monnaie n&#39;est plus en phase de déclaration"
+
+      assert render(view) =~
+               "Impossible de supprimer une dépense lorsque le porte-monnaie n&#39;est plus en phase de déclaration"
+
       assert Expenses.get_expense!(expense.id) != nil
     end
   end
 
   describe "Modification de dépense (ExpenseEdit LiveView)" do
-    test "affiche le bouton de modification uniquement pour l'auteur ou le payeur en phase ouverte", %{conn: conn} do
+    test "affiche le bouton de modification uniquement pour l'auteur ou le payeur en phase ouverte",
+         %{conn: conn} do
       %{creator: creator, bob: bob, wallet: wallet} = setup_wallet()
       charlie = create_user(%{name: "Charlie", email: "charlie_edit@test.com"})
 
@@ -306,7 +314,8 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
         })
 
       # Bob est le créateur et le payeur
-      {:ok, expense1} = Expenses.create_expense(bob, wallet, %{title: "Dépense Bob", amount: "20.00"})
+      {:ok, expense1} =
+        Expenses.create_expense(bob, wallet, %{title: "Dépense Bob", amount: "20.00"})
 
       # Bob voit le bouton d'édition
       conn_bob = authenticate_user(conn, bob)
@@ -325,7 +334,13 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
       # Cas où l'auteur et le payeur sont distincts : Alice ajoute pour Bob
       bob_member = Enum.find(wallet.members, &(&1.name == "Bob"))
-      {:ok, expense2} = Expenses.create_expense(creator, wallet, %{title: "Cadeau", amount: "50.00", payer_id: bob_member.id})
+
+      {:ok, expense2} =
+        Expenses.create_expense(creator, wallet, %{
+          title: "Cadeau",
+          amount: "50.00",
+          payer_id: bob_member.id
+        })
 
       # Alice (qui a ajouté) voit le bouton d'édition
       {:ok, view_alice2, _html} = live(conn_alice, ~p"/wallets/#{wallet.id}")
@@ -338,7 +353,9 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
     test "masque le bouton de modification hors phase de déclaration", %{conn: conn} do
       %{creator: creator, wallet: wallet} = setup_wallet()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
 
       {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
 
@@ -349,7 +366,9 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
 
     test "permet de modifier avec succès une dépense via le formulaire ExpenseEdit", %{conn: conn} do
       %{creator: creator, wallet: wallet} = setup_wallet()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Ancien titre", amount: "40.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Ancien titre", amount: "40.00"})
 
       conn = authenticate_user(conn, creator)
       {:ok, edit_view, _html} = live(conn, ~p"/wallets/#{wallet.id}/expenses/#{expense.id}/edit")
@@ -380,9 +399,11 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
           user_id: charlie.id
         })
 
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Privé", amount: "30.00"})
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Privé", amount: "30.00"})
 
       conn_charlie = authenticate_user(conn, charlie)
+
       assert {:error, {:live_redirect, %{to: to, flash: %{"error" => msg}}}} =
                live(conn_charlie, ~p"/wallets/#{wallet.id}/expenses/#{expense.id}/edit")
 
@@ -390,13 +411,17 @@ defmodule LesBonsComptesWeb.ExpenseLiveTest do
       assert msg =~ "pas autorisé à modifier cette dépense"
     end
 
-    test "redirige avec un message d'erreur si le porte-monnaie n'est plus en phase de déclaration", %{conn: conn} do
+    test "redirige avec un message d'erreur si le porte-monnaie n'est plus en phase de déclaration",
+         %{conn: conn} do
       %{creator: creator, wallet: wallet} = setup_wallet()
-      {:ok, expense} = Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
+
+      {:ok, expense} =
+        Expenses.create_expense(creator, wallet, %{title: "Courses", amount: "30.00"})
 
       {:ok, _pending} = Wallets.validate_wallet(creator, wallet)
 
       conn = authenticate_user(conn, creator)
+
       assert {:error, {:live_redirect, %{to: to, flash: %{"error" => msg}}}} =
                live(conn, ~p"/wallets/#{wallet.id}/expenses/#{expense.id}/edit")
 
