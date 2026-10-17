@@ -294,9 +294,9 @@ defmodule LesBonsComptesWeb.WalletLive.New do
                           <div class="font-semibold text-sm text-base-content flex items-center gap-2">
                             <span>{participant.name}</span>
                             <.member_badge is_owner={false} />
-                            <span class="badge badge-warning badge-xs gap-1">
+                            <span class="badge badge-warning badge-xs gap-1 whitespace-nowrap">
                               <.icon name="hero-envelope" class="size-2.5" />
-                              <span>Invitation à envoyer</span>
+                              <span>À inviter</span>
                             </span>
                           </div>
                           <%= if participant.email do %>

@@ -122,19 +122,23 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     ~H"""
     <%= case @status do %>
       <% "pending" -> %>
-        <span class="badge badge-warning badge-xs gap-1">
-          <.icon name="hero-paper-airplane" class="size-2.5" /> Invitation envoyée
+        <span class="badge badge-warning badge-xs gap-1 whitespace-nowrap">
+          <.icon name="hero-clock" class="size-2.5" /> En attente
         </span>
       <% "accepted" -> %>
-        <span class="badge badge-success badge-xs gap-1">
+        <span class="badge badge-success badge-xs gap-1 whitespace-nowrap">
           <.icon name="hero-check" class="size-2.5" /> Acceptée
         </span>
       <% "declined" -> %>
-        <span class="badge badge-error badge-xs gap-1">
+        <span class="badge badge-error badge-xs gap-1 whitespace-nowrap">
           <.icon name="hero-x-mark" class="size-2.5" /> Refusée
         </span>
+      <% "cancelled" -> %>
+        <span class="badge badge-ghost badge-xs gap-1 whitespace-nowrap">
+          <.icon name="hero-no-symbol" class="size-2.5" /> Annulée
+        </span>
       <% _ -> %>
-        <span class="badge badge-ghost badge-xs">
+        <span class="badge badge-ghost badge-xs whitespace-nowrap">
           {@status}
         </span>
     <% end %>
