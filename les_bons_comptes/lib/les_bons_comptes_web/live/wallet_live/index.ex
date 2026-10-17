@@ -15,23 +15,28 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
      |> assign(:pending_invitations, pending_invitations)
      |> assign(:active_tab, "my_wallets")
      |> assign(:wallet_status_filter, "all")
+     |> assign(:wallet_page, 1)
+     |> assign(:invited_page, 1)
      |> assign(:all_wallets, [])
      |> assign(:wallets, [])
+     |> assign(:wallets_pagination, nil)
      |> assign(:wallet_counts, %{})
      |> assign(:wallets_error, nil)
      |> assign(:invitation_filter, "all")
      |> assign(:invited_wallets, [])
      |> assign(:all_invited_wallets, [])
+     |> assign(:invited_pagination, nil)
      |> assign(:invited_counts, %{})
      |> assign(:loading_error, nil)
-     |> load_wallets_data(user.id, "all")
-     |> load_invited_wallets_data(user.id, "all")}
+     |> load_wallets_data(user.id, "all", 1)
+     |> load_invited_wallets_data(user.id, "all", 1)}
   end
 
   @impl true
   def handle_params(params, uri, socket) do
     user = socket.assigns.current_user
     path = URI.parse(uri).path
+    page = params["page"] || 1
 
     {tab, status_filter} =
       cond do
@@ -59,7 +64,8 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
         |> assign(:active_tab, tab)
         |> assign(:page_title, "Portes-monnaies invités - Les Bons Comptes")
         |> assign(:invitation_filter, status_filter)
-        |> load_invited_wallets_data(user.id, status_filter)
+        |> assign(:invited_page, page)
+        |> load_invited_wallets_data(user.id, status_filter, page)
       else
         page_title =
           case status_filter do
@@ -72,7 +78,8 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
         |> assign(:active_tab, tab)
         |> assign(:page_title, page_title)
         |> assign(:wallet_status_filter, status_filter)
-        |> load_wallets_data(user.id, status_filter)
+        |> assign(:wallet_page, page)
+        |> load_wallets_data(user.id, status_filter, page)
       end
 
     {:noreply, socket}
@@ -100,11 +107,12 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
   def handle_event("retry_load_wallets", _params, socket) do
     user = socket.assigns.current_user
     filter = socket.assigns.wallet_status_filter || "all"
+    page = socket.assigns[:wallet_page] || 1
 
     {:noreply,
      socket
      |> assign(:wallets_error, nil)
-     |> load_wallets_data(user.id, filter)}
+     |> load_wallets_data(user.id, filter, page)}
   end
 
   @impl true
@@ -121,14 +129,27 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
   end
 
   @impl true
+  def handle_event("change_wallet_page", %{"page" => page}, socket) do
+    status = socket.assigns.wallet_status_filter || "all"
+    {:noreply, push_patch(socket, to: wallet_path(status, page))}
+  end
+
+  @impl true
+  def handle_event("change_invited_page", %{"page" => page}, socket) do
+    status = socket.assigns.invitation_filter || "all"
+    {:noreply, push_patch(socket, to: invited_path(status, page))}
+  end
+
+  @impl true
   def handle_event("retry_load_invited", _params, socket) do
     user = socket.assigns.current_user
     filter = socket.assigns.invitation_filter || "all"
+    page = socket.assigns.invited_page || 1
 
     {:noreply,
      socket
      |> assign(:loading_error, nil)
-     |> load_invited_wallets_data(user.id, filter)}
+     |> load_invited_wallets_data(user.id, filter, page)}
   end
 
   @impl true
@@ -151,8 +172,8 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
          socket
          |> put_flash(:info, "Félicitations ! Vous avez rejoint le porte-monnaie avec succès.")
          |> assign(:pending_invitations, pending_invitations)
-         |> load_wallets_data(user.id, socket.assigns.wallet_status_filter)
-         |> load_invited_wallets_data(user.id, socket.assigns.invitation_filter)}
+         |> load_wallets_data(user.id, socket.assigns.wallet_status_filter, socket.assigns.wallet_page)
+         |> load_invited_wallets_data(user.id, socket.assigns.invitation_filter, socket.assigns.invited_page)}
 
       {:error, :invitations_disabled} ->
         pending_invitations = Wallets.list_pending_invitations_for_user(user.id)
@@ -164,7 +185,7 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
            "Impossible d'accepter cette invitation : le porte-monnaie n'est plus en phase de déclaration."
          )
          |> assign(:pending_invitations, pending_invitations)
-         |> load_invited_wallets_data(user.id, socket.assigns.invitation_filter)}
+         |> load_invited_wallets_data(user.id, socket.assigns.invitation_filter, socket.assigns.invited_page)}
 
       {:error, reason} ->
         {:noreply,
@@ -184,7 +205,7 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
          socket
          |> put_flash(:info, "Vous avez refusé l'invitation.")
          |> assign(:pending_invitations, pending_invitations)
-         |> load_invited_wallets_data(user.id, socket.assigns.invitation_filter)}
+         |> load_invited_wallets_data(user.id, socket.assigns.invitation_filter, socket.assigns.invited_page)}
 
       {:error, reason} ->
         {:noreply,
@@ -192,7 +213,36 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
     end
   end
 
-  defp load_wallets_data(socket, user_id, filter) do
+  def wallet_path(filter, page) do
+    page = if is_binary(page), do: String.to_integer(page), else: page
+
+    base =
+      case filter do
+        "open" -> "/wallets/open"
+        "closed" -> "/wallets/closed"
+        "all" -> "/wallets"
+        other -> "/wallets?status=#{other}"
+      end
+
+    if page > 1 do
+      if String.contains?(base, "?"), do: "#{base}&page=#{page}", else: "#{base}?page=#{page}"
+    else
+      base
+    end
+  end
+
+  def invited_path(status, page) do
+    page = if is_binary(page), do: String.to_integer(page), else: page
+    status = status || "all"
+
+    if page > 1 do
+      "/wallets?tab=invited&status=#{status}&page=#{page}"
+    else
+      "/wallets?tab=invited&status=#{status}"
+    end
+  end
+
+  defp load_wallets_data(socket, user_id, filter, page) do
     case Wallets.fetch_wallets_for_user(user_id, "all") do
       {:ok, all_wallets} ->
         counts = %{
@@ -203,10 +253,12 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
         }
 
         filtered = Wallets.filter_wallets_by_status(all_wallets, filter)
+        pagination = LesBonsComptes.Pagination.paginate(filtered, page, 8)
 
         socket
         |> assign(:all_wallets, all_wallets)
-        |> assign(:wallets, filtered)
+        |> assign(:wallets, pagination.entries)
+        |> assign(:wallets_pagination, pagination)
         |> assign(:wallet_counts, counts)
         |> assign(:wallets_error, nil)
 
@@ -214,6 +266,17 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
         socket
         |> assign(:all_wallets, [])
         |> assign(:wallets, [])
+        |> assign(:wallets_pagination, %LesBonsComptes.Pagination{
+          entries: [],
+          page_number: 1,
+          page_size: 8,
+          total_entries: 0,
+          total_pages: 1,
+          has_prev: false,
+          has_next: false,
+          start_index: 0,
+          end_index: 0
+        })
         |> assign(:wallet_counts, %{})
         |> assign(
           :wallets_error,
@@ -222,7 +285,7 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
     end
   end
 
-  defp load_invited_wallets_data(socket, user_id, filter) do
+  defp load_invited_wallets_data(socket, user_id, filter, page) do
     case Wallets.fetch_invited_wallets(user_id, "all") do
       {:ok, all_invited} ->
         counts = %{
@@ -238,10 +301,12 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
         }
 
         filtered = Wallets.filter_invited_wallets_by_status(all_invited, filter)
+        pagination = LesBonsComptes.Pagination.paginate(filtered, page, 6)
 
         socket
         |> assign(:all_invited_wallets, all_invited)
-        |> assign(:invited_wallets, filtered)
+        |> assign(:invited_wallets, pagination.entries)
+        |> assign(:invited_pagination, pagination)
         |> assign(:invited_counts, counts)
         |> assign(:loading_error, nil)
 
@@ -249,6 +314,17 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
         socket
         |> assign(:all_invited_wallets, [])
         |> assign(:invited_wallets, [])
+        |> assign(:invited_pagination, %LesBonsComptes.Pagination{
+          entries: [],
+          page_number: 1,
+          page_size: 6,
+          total_entries: 0,
+          total_pages: 1,
+          has_prev: false,
+          has_next: false,
+          start_index: 0,
+          end_index: 0
+        })
         |> assign(:invited_counts, %{})
         |> assign(
           :loading_error,
@@ -366,7 +442,11 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
                 counts={@invited_counts}
               />
               <div class="text-xs text-base-content/60 font-medium sm:text-right">
-                <span id="filtered-invited-count">{length(@invited_wallets)}</span>
+                <span id="filtered-invited-count">
+                  {if @invited_pagination,
+                    do: @invited_pagination.total_entries,
+                    else: length(@invited_wallets)}
+                </span>
                 porte-monnaie(s) invité(s)
               </div>
             </div>
@@ -392,6 +472,14 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
                   <.invited_wallet_card wallet={wallet} current_user={@current_user} />
                 <% end %>
               </div>
+
+              <.pagination
+                :if={@invited_pagination}
+                pagination={@invited_pagination}
+                id="invited-wallets-pagination"
+                item_name="portes-monnaies"
+                path_fn={&invited_path(@invitation_filter, &1)}
+              />
             <% end %>
           </div>
         <% else %>
@@ -597,6 +685,14 @@ defmodule LesBonsComptesWeb.WalletLive.Index do
                       </.link>
                     <% end %>
                   </div>
+
+                  <.pagination
+                    :if={@wallets_pagination}
+                    pagination={@wallets_pagination}
+                    id="wallets-pagination"
+                    item_name="portes-monnaies"
+                    path_fn={&wallet_path(@wallet_status_filter, &1)}
+                  />
                 <% end %>
               <% end %>
             <% end %>

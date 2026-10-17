@@ -1289,6 +1289,139 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     """
   end
 
+  @doc """
+  Renders a universal pagination control bar with entries summary, page numbers,
+  and Previous/Next navigation buttons.
+  """
+  attr :pagination, LesBonsComptes.Pagination, required: true
+  attr :id, :string, default: "pagination"
+  attr :item_name, :string, default: "éléments"
+  attr :on_page_change, :string, default: "change_page"
+  attr :path_fn, :any, default: nil
+  attr :class, :string, default: ""
+
+  def pagination(assigns) do
+    ~H"""
+    <div
+      :if={@pagination && @pagination.total_entries > 0}
+      id={@id}
+      class={["flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-base-200", @class]}
+    >
+      <div id={"#{@id}-summary"} class="text-xs text-base-content/60">
+        Affichage de <span class="font-semibold text-base-content">{@pagination.start_index}</span> à <span class="font-semibold text-base-content">{@pagination.end_index}</span> sur <span class="font-semibold text-base-content">{@pagination.total_entries}</span> {@item_name}
+      </div>
+
+      <div :if={@pagination.total_pages > 1} class="join shadow-sm">
+        <%!-- Previous Page Button --%>
+        <%= if @path_fn do %>
+          <%= if @pagination.has_prev do %>
+            <.link
+              patch={@path_fn.(@pagination.page_number - 1)}
+              id={"#{@id}-prev-btn"}
+              class="join-item btn btn-sm gap-1"
+            >
+              <.icon name="hero-chevron-left" class="size-4" />
+              <span class="sr-only sm:not-sr-only sm:inline text-xs">Précédent</span>
+            </.link>
+          <% else %>
+            <button
+              type="button"
+              id={"#{@id}-prev-btn"}
+              disabled
+              class="join-item btn btn-sm btn-disabled gap-1"
+            >
+              <.icon name="hero-chevron-left" class="size-4" />
+              <span class="sr-only sm:not-sr-only sm:inline text-xs">Précédent</span>
+            </button>
+          <% end %>
+        <% else %>
+          <button
+            type="button"
+            id={"#{@id}-prev-btn"}
+            phx-click={@on_page_change}
+            phx-value-page={@pagination.page_number - 1}
+            disabled={not @pagination.has_prev}
+            class={["join-item btn btn-sm gap-1", not @pagination.has_prev && "btn-disabled"]}
+          >
+            <.icon name="hero-chevron-left" class="size-4" />
+            <span class="sr-only sm:not-sr-only sm:inline text-xs">Précédent</span>
+          </button>
+        <% end %>
+
+        <%!-- Page Numbers --%>
+        <%= for page_item <- LesBonsComptes.Pagination.page_range(@pagination.page_number, @pagination.total_pages) do %>
+          <%= case page_item do %>
+            <% page when is_integer(page) -> %>
+              <%= if @path_fn do %>
+                <.link
+                  patch={@path_fn.(page)}
+                  id={"#{@id}-page-#{page}-btn"}
+                  class={[
+                    "join-item btn btn-sm min-w-8 text-xs",
+                    page == @pagination.page_number && "btn-primary font-bold shadow-sm"
+                  ]}
+                >
+                  {page}
+                </.link>
+              <% else %>
+                <button
+                  type="button"
+                  id={"#{@id}-page-#{page}-btn"}
+                  phx-click={@on_page_change}
+                  phx-value-page={page}
+                  class={[
+                    "join-item btn btn-sm min-w-8 text-xs",
+                    page == @pagination.page_number && "btn-primary font-bold shadow-sm"
+                  ]}
+                >
+                  {page}
+                </button>
+              <% end %>
+            <% _ellipsis -> %>
+              <span class="join-item btn btn-sm btn-disabled min-w-8 text-xs">...</span>
+          <% end %>
+        <% end %>
+
+        <%!-- Next Page Button --%>
+        <%= if @path_fn do %>
+          <%= if @pagination.has_next do %>
+            <.link
+              patch={@path_fn.(@pagination.page_number + 1)}
+              id={"#{@id}-next-btn"}
+              class="join-item btn btn-sm gap-1"
+            >
+              <span class="sr-only sm:not-sr-only sm:inline text-xs">Suivant</span>
+              <.icon name="hero-chevron-right" class="size-4" />
+            </.link>
+          <% else %>
+            <button
+              type="button"
+              id={"#{@id}-next-btn"}
+              disabled
+              class="join-item btn btn-sm btn-disabled gap-1"
+            >
+              <span class="sr-only sm:not-sr-only sm:inline text-xs">Suivant</span>
+              <.icon name="hero-chevron-right" class="size-4" />
+            </button>
+          <% end %>
+        <% else %>
+          <button
+            type="button"
+            id={"#{@id}-next-btn"}
+            phx-click={@on_page_change}
+            phx-value-page={@pagination.page_number + 1}
+            disabled={not @pagination.has_next}
+            class={["join-item btn btn-sm gap-1", not @pagination.has_next && "btn-disabled"]}
+          >
+            <span class="sr-only sm:not-sr-only sm:inline text-xs">Suivant</span>
+            <.icon name="hero-chevron-right" class="size-4" />
+          </button>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
   def format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%d/%m/%Y")
   def format_date(%NaiveDateTime{} = ndt), do: Calendar.strftime(ndt, "%d/%m/%Y")
   def format_date(_), do: ""
