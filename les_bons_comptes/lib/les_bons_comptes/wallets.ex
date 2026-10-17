@@ -38,7 +38,6 @@ defmodule LesBonsComptes.Wallets do
   defdelegate decline_invitation(user, invitation_or_id), to: Invitations, as: :decline
   defdelegate cancel_invitation(user, invitation_id), to: Invitations, as: :cancel
 
-  # Invited wallets retrieval and filtering (Epic)
   defdelegate list_invited_wallets_for_user(user_or_id, status \\ nil), to: Invitations
 
   defdelegate list_invited_wallets(user_or_id, status \\ nil),
@@ -47,6 +46,9 @@ defmodule LesBonsComptes.Wallets do
 
   defdelegate fetch_invited_wallets(user_or_id, status \\ nil), to: Invitations
   defdelegate filter_invited_wallets_by_status(query_or_list, status), to: Invitations
+
+  defdelegate paginate_invited_wallets(user_or_id, status \\ nil, page \\ 1, page_size \\ 6),
+    to: Invitations
 
   defdelegate list_invitations_for_user(user_or_id, status \\ nil),
     to: Invitations,
@@ -75,6 +77,7 @@ defmodule LesBonsComptes.Wallets do
     to: LesBonsComptes.Expenses
 
   defdelegate list_settled_transfers(wallet_id), to: LesBonsComptes.Expenses
+  defdelegate paginate_expenses(wallet_or_id, page \\ 1, page_size \\ 8), to: LesBonsComptes.Expenses
 
   @doc """
   Returns all wallets the user participates in
@@ -99,6 +102,14 @@ defmodule LesBonsComptes.Wallets do
     query
     |> filter_wallets_by_status(status)
     |> Repo.all()
+  end
+
+  @doc """
+  Returns a `%LesBonsComptes.Pagination{}` of wallets for a user.
+  """
+  def paginate_wallets(user_or_id, status \\ nil, page \\ 1, page_size \\ 8) do
+    list_wallets_for_user(user_or_id, status)
+    |> LesBonsComptes.Pagination.paginate(page, page_size)
   end
 
   @doc """

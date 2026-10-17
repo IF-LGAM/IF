@@ -241,6 +241,14 @@ defmodule LesBonsComptes.Wallets.Invitations do
   end
 
   @doc """
+  Returns a `%LesBonsComptes.Pagination{}` of invited wallets for a user.
+  """
+  def paginate_invited_wallets(user_or_id, status \\ nil, page \\ 1, page_size \\ 6) do
+    list_invited_wallets_for_user(user_or_id, status)
+    |> LesBonsComptes.Pagination.paginate(page, page_size)
+  end
+
+  @doc """
   Filters an Ecto query or a list of wallets or invitations by invitation status.
   Accepts 'all', 'pending', 'accepted', 'declined', 'cancelled' (as atom or string).
   """

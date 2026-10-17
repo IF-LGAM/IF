@@ -6,15 +6,18 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
   alias LesBonsComptes.Wallets
 
   @impl true
-  def mount(%{"id" => id}, _session, socket) do
+  def mount(%{"id" => id} = params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(LesBonsComptes.PubSub, "wallet:#{id}")
     end
 
-    case load_wallet_data(id) do
+    page = parse_page(params["page"])
+
+    case load_wallet_data(id, page) do
       {:ok, data} ->
         {:ok,
          socket
+         |> assign(:wallet_id, id)
          |> assign(:page_title, "#{data.wallet.name} - Les Bons Comptes")
          |> assign(data)}
 
@@ -27,8 +30,31 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    case socket.assigns[:wallet] do
+      nil ->
+        {:noreply, socket}
+
+      wallet ->
+        page = parse_page(params["page"])
+
+        if socket.assigns[:current_expense_page] != page do
+          case load_wallet_data(wallet.id, page) do
+            {:ok, data} ->
+              {:noreply, assign(socket, data)}
+
+            {:error, _} ->
+              {:noreply, socket}
+          end
+        else
+          {:noreply, socket}
+        end
+    end
+  end
+
+  @impl true
   def handle_info({:wallet_updated, wallet_id}, socket) do
-    case load_wallet_data(wallet_id) do
+    case load_wallet_data(wallet_id, current_expense_page(socket)) do
       {:ok, data} ->
         {:noreply, assign(socket, data)}
 
@@ -91,7 +117,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
     case Expenses.delete_expense(current_user, expense_id) do
       {:ok, deleted_expense} ->
-        case load_wallet_data(wallet.id) do
+        case load_wallet_data(wallet.id, current_expense_page(socket)) do
           {:ok, data} ->
             {:noreply,
              socket
@@ -135,12 +161,12 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
     case Wallets.validate_wallet(current_user, wallet) do
       {:ok, updated_wallet} ->
-        case load_wallet_data(wallet.id) do
+        case load_wallet_data(wallet.id, current_expense_page(socket)) do
           {:ok, data} ->
             if data.settlements == [] do
               case Wallets.close_wallet(current_user, updated_wallet) do
                 {:ok, _closed_wallet} ->
-                  {:ok, closed_data} = load_wallet_data(wallet.id)
+                  {:ok, closed_data} = load_wallet_data(wallet.id, current_expense_page(socket))
 
                   {:noreply,
                    socket
@@ -207,7 +233,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
       true ->
         case Wallets.reopen_wallet(current_user, wallet) do
           {:ok, _updated_wallet} ->
-            case load_wallet_data(wallet.id) do
+            case load_wallet_data(wallet.id, current_expense_page(socket)) do
               {:ok, data} ->
                 {:noreply,
                  socket
@@ -256,7 +282,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
 
     case Expenses.settle_transfer(current_user, wallet, from_id, to_id, amount) do
       {:ok, _settlement} ->
-        {:ok, new_data} = load_wallet_data(wallet.id)
+        {:ok, new_data} = load_wallet_data(wallet.id, current_expense_page(socket))
         currency = new_data.wallet.currency
 
         if new_data.wallet.status == "closed" do
@@ -300,7 +326,43 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
     end
   end
 
-  defp load_wallet_data(wallet_id) do
+  @impl true
+  def handle_event("change_expense_page", %{"page" => page}, socket) do
+    wallet = socket.assigns.wallet
+    page = parse_page(page)
+    {:noreply, push_patch(socket, to: expense_path(wallet.id, page))}
+  end
+
+  def expense_path(wallet_id, page) do
+    page = if is_binary(page), do: String.to_integer(page), else: page
+
+    if page > 1 do
+      "/wallets/#{wallet_id}?page=#{page}"
+    else
+      "/wallets/#{wallet_id}"
+    end
+  end
+
+  defp current_expense_page(socket) do
+    socket.assigns[:current_expense_page] || 1
+  end
+
+  defp parse_page(nil), do: 1
+  defp parse_page(""), do: 1
+
+  defp parse_page(page) when is_binary(page) do
+    case Integer.parse(page) do
+      {num, ""} when num > 0 -> num
+      _ -> 1
+    end
+  end
+
+  defp parse_page(page) when is_integer(page) and page > 0, do: page
+  defp parse_page(_), do: 1
+
+  defp load_wallet_data(wallet_id, page) do
+    page = parse_page(page)
+
     try do
       wallet = Wallets.get_wallet!(wallet_id)
       total_expenses = Expenses.total_expenses_for_wallet(wallet.id)
@@ -311,9 +373,14 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
       settled_records = Expenses.list_settled_transfers(wallet.id)
       mock_settled_ids = MapSet.new(settled_records, &"#{&1.from_id}->#{&1.to_id}")
 
+      expenses_pagination = Expenses.paginate_expenses(wallet.expenses, page, 8)
+
       {:ok,
        %{
          wallet: wallet,
+         current_expense_page: page,
+         expenses_pagination: expenses_pagination,
+         paginated_expenses: expenses_pagination.entries,
          total_expenses: total_expenses,
          expenses_by_member: expenses_by_member,
          creditors: creditors,
@@ -538,7 +605,7 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
               </div>
             <% else %>
               <div id="wallet-expenses-list" class="divide-y divide-base-200">
-                <%= for expense <- @wallet.expenses do %>
+                <%= for expense <- @paginated_expenses do %>
                   <.expense_item
                     expense={expense}
                     can_delete={Expenses.can_delete_expense?(@current_user, expense)}
@@ -547,6 +614,14 @@ defmodule LesBonsComptesWeb.WalletLive.Show do
                   />
                 <% end %>
               </div>
+
+              <.pagination
+                :if={@expenses_pagination}
+                pagination={@expenses_pagination}
+                id="expenses-pagination"
+                item_name="dépenses"
+                path_fn={&expense_path(@wallet.id, &1)}
+              />
             <% end %>
           </div>
         </div>

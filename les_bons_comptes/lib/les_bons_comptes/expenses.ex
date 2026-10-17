@@ -25,6 +25,38 @@ defmodule LesBonsComptes.Expenses do
   end
 
   @doc """
+  Returns a `%LesBonsComptes.Pagination{}` of expenses for a wallet, ordered by descending date.
+  """
+  def list_expenses_for_wallet_paginated(wallet_or_id, page \\ 1, page_size \\ 8)
+
+  def list_expenses_for_wallet_paginated(%{id: wallet_id}, page, page_size),
+    do: list_expenses_for_wallet_paginated(wallet_id, page, page_size)
+
+  def list_expenses_for_wallet_paginated(wallet_id, page, page_size)
+      when is_integer(wallet_id) or is_binary(wallet_id) do
+    list_expenses_for_wallet(wallet_id)
+    |> LesBonsComptes.Pagination.paginate(page, page_size)
+  end
+
+  @doc """
+  Paginates expenses for a list of expenses, a wallet struct, or a wallet ID.
+  """
+  def paginate_expenses(expenses_or_wallet, page \\ 1, page_size \\ 8)
+
+  def paginate_expenses(expenses, page, page_size) when is_list(expenses) do
+    LesBonsComptes.Pagination.paginate(expenses, page, page_size)
+  end
+
+  def paginate_expenses(%{id: wallet_id}, page, page_size) do
+    list_expenses_for_wallet_paginated(wallet_id, page, page_size)
+  end
+
+  def paginate_expenses(wallet_id, page, page_size)
+      when is_integer(wallet_id) or is_binary(wallet_id) do
+    list_expenses_for_wallet_paginated(wallet_id, page, page_size)
+  end
+
+  @doc """
   Retrieves an expense by its ID with its associations preloaded.
   Raises if not found.
   """
