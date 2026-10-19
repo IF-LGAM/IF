@@ -491,49 +491,51 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
     <div
       id={"settlement-item-#{@settlement.from_id}-#{@settlement.to_id}"}
       class={[
-        "py-3.5 px-4 rounded-xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4",
+        "p-4 rounded-xl border transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4",
         if(@is_mock_settled,
           do: "bg-success/5 border-success/30 opacity-80",
           else: "bg-base-100 border-base-200 hover:border-primary/30 hover:shadow-sm"
         )
       ]}
     >
-      <div class="flex items-center gap-3 min-w-0">
+      <%!-- Flux Débiteur -> Créditeur --%>
+      <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-wrap sm:flex-nowrap">
         <%!-- Debtor --%>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
           <.member_avatar name={@settlement.from_name} size="size-8" />
           <div class="text-sm font-semibold text-base-content truncate">
-            <span>{@settlement.from_name}</span>
+            <span title={@settlement.from_name}>{@settlement.from_name}</span>
           </div>
         </div>
 
         <%!-- Flèche directionnelle --%>
-        <div class="flex items-center gap-1 text-primary shrink-0 px-2.5 py-1 bg-primary/10 rounded-lg text-xs font-semibold">
+        <div class="flex items-center gap-1 text-primary shrink-0 px-2.5 py-1 bg-primary/10 rounded-lg text-xs font-semibold whitespace-nowrap">
           <span>doit donner</span>
           <.icon name="hero-arrow-right" class="size-3.5" />
         </div>
 
         <%!-- Créditeur --%>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
           <.member_avatar name={@settlement.to_name} size="size-8" />
           <div class="text-sm font-semibold text-base-content truncate">
-            <span>{@settlement.to_name}</span>
+            <span title={@settlement.to_name}>{@settlement.to_name}</span>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-        <div class="text-right">
-          <span class="text-base font-bold text-primary">
+      <%!-- Montant et statut / bouton d'action --%>
+      <div class="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t border-base-200/60 md:border-t-0">
+        <div class="text-left md:text-right">
+          <div class="text-base font-bold text-primary whitespace-nowrap">
             {format_amount(@settlement.amount)} {@currency}
-          </span>
-          <div class="text-xs text-base-content/50">Virement conseillé</div>
+          </div>
+          <div class="text-xs text-base-content/50 whitespace-nowrap">Virement conseillé</div>
         </div>
 
         <%= if @is_mock_settled do %>
           <div
             id={"mock-settled-badge-#{@settlement.from_id}-#{@settlement.to_id}"}
-            class="badge badge-success badge-sm gap-1 py-3 px-2.5 font-semibold shadow-sm"
+            class="badge badge-success badge-sm gap-1 py-3 px-2.5 font-semibold shadow-sm shrink-0 whitespace-nowrap"
           >
             <.icon name="hero-check-circle" class="size-4" />
             <span>Réglé</span>
@@ -549,14 +551,14 @@ defmodule LesBonsComptesWeb.WalletLive.WalletComponents do
               phx-value-from_name={@settlement.from_name}
               phx-value-to_name={@settlement.to_name}
               phx-value-amount={format_amount(@settlement.amount)}
-              class="btn btn-xs btn-outline btn-success gap-1 hover:shadow-sm"
+              class="btn btn-xs btn-outline btn-success gap-1 hover:shadow-sm shrink-0 whitespace-nowrap"
               title="Marquer ce virement comme réglé"
             >
               <.icon name="hero-check" class="size-3.5" />
               <span>Marquer comme réglé</span>
             </button>
           <% else %>
-            <span class="text-xs text-base-content/50 italic">En attente du virement</span>
+            <span class="text-xs text-base-content/50 italic shrink-0 whitespace-nowrap">En attente du virement</span>
           <% end %>
         <% end %>
       </div>
