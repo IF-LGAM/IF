@@ -9,7 +9,7 @@ defmodule LesBonsComptesWeb.Layouts do
   # The default root.html.heex file contains the HTML
   # skeleton of your application, namely HTML headers
   # and other static content.
-  embed_templates "layouts/*"
+  embed_templates("layouts/*")
 
   @doc """
   Renders your app layout.
@@ -25,25 +25,29 @@ defmodule LesBonsComptesWeb.Layouts do
       </Layouts.app>
 
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
+  attr(:flash, :map, required: true, doc: "the map of flash messages")
 
-  attr :current_scope, :map,
+  attr(:current_scope, :map,
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
+  )
 
-  attr :current_user, :any,
+  attr(:current_user, :any,
     default: nil,
     doc: "the current authenticated user"
+  )
 
-  attr :show_sign_in, :boolean,
+  attr(:show_sign_in, :boolean,
     default: true,
     doc: "whether to show the sign-in / sign-up button in navbar"
+  )
 
-  attr :pending_invitations, :list,
+  attr(:pending_invitations, :list,
     default: nil,
     doc: "optional list of pending invitations for the notifications bell"
+  )
 
-  slot :inner_block, required: true
+  slot(:inner_block, required: true)
 
   def app(assigns) do
     notifications =
@@ -220,8 +224,8 @@ defmodule LesBonsComptesWeb.Layouts do
 
       <.flash_group flash={@flash} />
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
-  attr :id, :string, default: "flash-group", doc: "the optional id of flash container"
+  attr(:flash, :map, required: true, doc: "the map of flash messages")
+  attr(:id, :string, default: "flash-group", doc: "the optional id of flash container")
 
   def flash_group(assigns) do
     ~H"""
