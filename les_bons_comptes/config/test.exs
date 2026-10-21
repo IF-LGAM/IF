@@ -6,10 +6,11 @@ import Config
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 config :les_bons_comptes, LesBonsComptes.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: System.get_env("POSTGRES_USER") || "postgres",
+  password: System.get_env("POSTGRES_PASSWORD") || "postgres",
   hostname: System.get_env("DATABASE_HOST") || "localhost",
-  database: "les_bons_comptes_test#{System.get_env("MIX_TEST_PARTITION")}",
+  port: String.to_integer(System.get_env("DATABASE_PORT") || "5432"),
+  database: System.get_env("POSTGRES_TEST_DB") || "les_bons_comptes_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 

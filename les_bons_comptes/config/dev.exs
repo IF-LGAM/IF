@@ -2,10 +2,11 @@ import Config
 
 # Configure your database
 config :les_bons_comptes, LesBonsComptes.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: System.get_env("POSTGRES_USER") || "postgres",
+  password: System.get_env("POSTGRES_PASSWORD") || "postgres",
   hostname: System.get_env("DATABASE_HOST") || "localhost",
-  database: "les_bons_comptes_dev",
+  port: String.to_integer(System.get_env("DATABASE_PORT") || "5432"),
+  database: System.get_env("POSTGRES_DB") || "les_bons_comptes_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

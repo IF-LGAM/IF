@@ -39,20 +39,27 @@ defmodule LesBonsComptes.Expenses.Expense do
       :wallet_id,
       :created_by_id
     ])
-    |> validate_required([:title, :amount, :date, :wallet_id, :payer_id],
-      message: "ce champ est obligatoire"
-    )
-    |> validate_length(:title,
-      min: 2,
-      max: 100,
-      message: "doit contenir entre 2 et 100 caractères"
-    )
-    |> validate_length(:description, max: 500, message: "ne doit pas dépasser 500 caractères")
-    |> validate_number(:amount, greater_than: 0, message: "doit être supérieur à 0")
-    |> validate_inclusion(:currency, Wallet.supported_currencies(),
-      message: "devise non supportée"
-    )
-    |> validate_not_in_future()
+    # =========================================================================
+    # TODO TP (Étape 3.1) : Définir les validations Ecto pour une dépense
+    # -------------------------------------------------------------------------
+    # En Elixir, un changeset est une transformation de données par tuyaux (|>).
+    # Décommentez et comprenez le pipeline de validation ci-dessous :
+    #
+    # 1. Rendre obligatoires :title, :amount, :date, :wallet_id, :payer_id :
+    # |> validate_required([:title, :amount, :date, :wallet_id, :payer_id],
+    #   message: "ce champ est obligatoire"
+    # )
+    #
+    # 2. Valider la longueur de :title (entre 2 et 100 caractères) :
+    # |> validate_length(:title, min: 2, max: 100, message: "doit contenir entre 2 et 100 caractères")
+    #
+    # 3. Valider que :amount est strictement positif (> 0) :
+    # |> validate_number(:amount, greater_than: 0, message: "doit être supérieur à 0")
+    #
+    # 4. Valider que la devise et la date sont cohérentes :
+    # |> validate_inclusion(:currency, Wallet.supported_currencies(), message: "devise non supportée")
+    # |> validate_not_in_future()
+    # =========================================================================
     |> foreign_key_constraint(:wallet_id)
     |> foreign_key_constraint(:payer_id)
     |> foreign_key_constraint(:created_by_id)

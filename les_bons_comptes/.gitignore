@@ -35,3 +35,6 @@ les_bons_comptes-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Environment files
+.env
+

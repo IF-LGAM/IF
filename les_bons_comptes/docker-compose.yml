@@ -27,10 +27,12 @@ services:
       - deps:/app/deps
       - build:/app/_build
     environment:
-      DATABASE_HOST: db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: les_bons_comptes_dev
+      DATABASE_HOST: ${DATABASE_HOST:-db}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-les_bons_comptes_dev}
+      POSTGRES_TEST_DB: ${POSTGRES_TEST_DB:-les_bons_comptes_test}
 
 volumes:
   postgres_data:
