@@ -32,21 +32,11 @@ defmodule LesBonsComptes.Expenses do
   def list_expenses_for_wallet_paginated(%{id: wallet_id}, page, page_size),
     do: list_expenses_for_wallet_paginated(wallet_id, page, page_size)
 
-  def list_expenses_for_wallet_paginated(_wallet_id, _page, _page_size) do
+  def list_expenses_for_wallet_paginated(_wallet_id, _page, _page_size) when is_integer(_wallet_id) or is_binary(_wallet_id) do
     # =========================================================================
     # TODO TP (Étape 3.3) : Récupérer les dépenses paginées d'un porte-monnaie
-    #
-    # Indice pour les étudiants :
-    # 1. Obtenir la liste de toutes les dépenses : list_expenses_for_wallet(wallet_id)
-    # 2. Les découper en pages avec le module Pagination :
-    #    |> LesBonsComptes.Pagination.paginate(page, page_size)
-    #
-    # Décommentez les lignes ci-dessous pour faire passer le test 3.3 !
     # =========================================================================
     raise "👉 TODO TP (Étape 3.3) : Implémentez list_expenses_for_wallet_paginated/3 dans lib/les_bons_comptes/expenses.ex !"
-
-    # list_expenses_for_wallet(wallet_id)
-    # |> LesBonsComptes.Pagination.paginate(page, page_size)
   end
 
   @doc """
@@ -225,6 +215,7 @@ defmodule LesBonsComptes.Expenses do
   Rejects with `{:error, :wallet_closed}` if the wallet is no longer in the declaration stage.
   """
   def delete_expense(%User{} = _user, %Expense{} = _expense) do
+    expense = Repo.preload(_expense, [:wallet, :payer])
     # =========================================================================
     # TODO TP (Étape 3.4) : Suppression sécurisée d'une dépense
     #
@@ -233,22 +224,8 @@ defmodule LesBonsComptes.Expenses do
     # 2. Si l'utilisateur est autorisé via `can_delete_expense?(user, expense)`,
     #    supprimer la dépense en base avec `Repo.delete(expense)`
     # 3. Sinon, refuser l'opération avec `{:error, :unauthorized}`
-    #
-    # Décommentez le bloc `cond do ... end` ci-dessous pour faire passer le test 3.4 !
     # =========================================================================
     raise "👉 TODO TP (Étape 3.4) : Implémentez delete_expense/2 dans lib/les_bons_comptes/expenses.ex !"
-
-    # expense = Repo.preload(expense, [:wallet, :payer])
-    # cond do
-    #   expense.wallet && expense.wallet.status != "open" ->
-    #     {:error, :wallet_closed}
-    #
-    #   can_delete_expense?(user, expense) ->
-    #     Repo.delete(expense)
-    #
-    #   true ->
-    #     {:error, :unauthorized}
-    # end
   end
 
   def delete_expense(%User{} = user, expense_id)

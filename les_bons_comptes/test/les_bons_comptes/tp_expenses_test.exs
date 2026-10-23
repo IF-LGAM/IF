@@ -97,21 +97,12 @@ defmodule LesBonsComptes.TpExpensesTest do
         payer_id: 1
       }
 
-      # =======================================================================
-      # TODO ÉTUDIANT (À vous d'écrire votre premier test !)
-      # -----------------------------------------------------------------------
-      # 1. Créez le changeset avec `Expense.changeset(%Expense{}, attrs_invalides)`
-      # 2. Vérifiez qu'il est invalide avec `refute changeset.valid?`
-      # 3. Vérifiez que errors_on(changeset) contient une erreur sur :amount
-      #
-      # Une fois les 3 lignes écrites, commentez ou supprimez le flunk(...) ci-dessous.
-      # =======================================================================
-      flunk("👉 Étape 2 : À vous d'écrire les assertions de ce test dans test/les_bons_comptes/tp_expenses_test.exs (lignes 86-98) !")
+      changeset = Expense.changeset(%Expense{}, _attrs_invalides)
 
-      # changeset = Expense.changeset(%Expense{}, attrs_invalides)
-      # refute changeset.valid?, "Le changeset devrait être invalide avec un montant négatif !"
-      # errors = errors_on(changeset)
-      # assert errors.amount != nil, "Le champ :amount devrait contenir un message d'erreur"
+      refute changeset.valid?
+
+      errors = errors_on(changeset)
+      assert errors.amount != nil
     end
   end
 
@@ -182,24 +173,36 @@ defmodule LesBonsComptes.TpExpensesTest do
 
     test "3.4 - Suppression sécurisée d'une dépense (Delete)" do
       %{alice: alice, bob: bob, wallet: wallet} = setup_wallet_with_members()
-
       {:ok, expense} =
         Expenses.create_expense(alice, wallet, %{
           title: "Billet de train",
           amount: "80.00",
           date: Date.utc_today()
         })
-
-      # Bob ne doit PAS pouvoir supprimer la dépense payée par Alice
+      # 1. Bob ne doit PAS pouvoir supprimer la dépense payée par Alice
       assert {:error, :unauthorized} = Expenses.delete_expense(bob, expense.id)
-
-      # Alice (ou le créateur du wallet) PEUT supprimer la dépense
+      # 2. Alice (ou le créateur du wallet) PEUT supprimer la dépense tant que le portefeuille est ouvert
       assert {:ok, _deleted} = Expenses.delete_expense(alice, expense.id)
-
       # Vérification qu'elle n'existe plus en base
       assert_raise Ecto.NoResultsError, fn ->
         Expenses.get_expense!(expense.id)
       end
+      # =======================================================================
+      # 3. Cas du portefeuille fermé : suppression impossible même pour Alice
+      # =======================================================================
+      # On recrée une dépense tant que le portefeuille est encore ouvert
+      {:ok, expense_in_closed} =
+        Expenses.create_expense(alice, wallet, %{
+          title: "Hôtel Barcelone",
+          amount: "150.00",
+          date: Date.utc_today()
+        })
+      # On clôture le portefeuille
+      {:ok, _closed_wallet} = Wallets.close_wallet(wallet)
+      # La suppression doit être rejetée avec {:error, :wallet_closed}
+      assert {:error, :wallet_closed} = Expenses.delete_expense(alice, expense_in_closed.id)
+      # On vérifie que la dépense est restée intacte en base
+      assert %Expense{} = Expenses.get_expense!(expense_in_closed.id)
     end
   end
 end

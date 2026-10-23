@@ -13,7 +13,7 @@
 1. [Présentation et Objectifs du TP](#1-présentation-et-objectifs-du-tp)
 2. [Initialisation et Démarrage du Projet](#2-initialisation-et-démarrage-du-projet)
 3. [Infrastructure : La Base de Données Partagée](#3-infrastructure--la-base-de-données-partagée)
-4. [Elixir & Phoenix en 5 minutes (Cheat-Sheet Débutant)](#4-elixir--phoenix-en-5-minutes-cheat-sheet-débutant)
+4. [Elixir & Phoenix Cheat-Sheet Débutant](#4-elixir--phoenix-cheat-sheet-débutant)
 5. [Étape 1 : Anatomie d'un Test ExUnit (Démonstration)](#5-étape-1--anatomie-dun-test-exunit-démonstration)
 6. [Étape 2 : Écrire votre premier test (TDD - Montant Invalide)](#6-étape-2--écrire-votre-premier-test-tdd---montant-invalide)
 7. [Étape 3 : Implémenter le CRUD & Faire passer tous les tests](#7-étape-3--implémenter-le-crud--faire-passer-tous-les-tests)
@@ -22,7 +22,6 @@
    - [3.3 — La Pagination des Dépenses (`Expenses.list_expenses_for_wallet_paginated/3`)](#33--la-pagination-des-dépenses)
    - [3.4 — La Suppression Sécurisée (`Expenses.delete_expense/2`)](#34--la-suppression-sécurisée)
 8. [Étape 4 : Découverte dans le Navigateur (Phoenix LiveView)](#8-étape-4--découverte-dans-le-navigateur-phoenix-liveview)
-9. [Plan d'action pour l'enseignant / encadrant](#9-plan-daction-pour-lenseignant--encadrant)
 
 ---
 
@@ -37,15 +36,14 @@
 - **Valider des données avec Ecto Changeset** : transformer et valider des structures sans jamais modifier l'état existant en place.
 - **Manipuler la base de données avec Ecto** : requêtes filtrées, ordonnées et paginées.
 - **Pratiquer le Test-Driven Development (TDD) avec ExUnit** : observer un test rouge, écrire le code minimal pour le rendre vert, et enrichir la suite de tests.
-- **Voir la réactivité de Phoenix LiveView** : interagir dans le navigateur avec une pagination dynamique mise à jour en temps réel via WebSockets, sans écrire une seule ligne de JavaScript !
+- **Voir la réactivité de Phoenix LiveView** : interagir dans le navigateur avec une pagination dynamique mise à jour en temps réel via WebSockets !
 
 ---
 
 ## 2. Initialisation et Démarrage du Projet
 
 ### 2.1 Prérequis
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et démarré sur votre machine.
-- Git configuré.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et démarré sur votre machine ou simplement **Docker** déjà présent sur les PC de l'université.
 
 *(Aucune installation locale d'Elixir, Erlang ou PostgreSQL n'est requise : tout s'exécute dans un conteneur Docker).*
 
@@ -59,9 +57,6 @@ Ouvrez un terminal et exécutez :
 # 1. Cloner le dépôt (si ce n'est pas déjà fait)
 git clone <URL_DU_DEPOT_GIT>
 cd les_bons_comptes
-
-# 2. Basculer sur la branche dédiée au TP
-git checkout feature/tp-if
 ```
 
 ---
@@ -76,7 +71,7 @@ Copiez le fichier d'exemple `.env.example` vers `.env` :
 cp .env.example .env
 ```
 
-Ouvrez le fichier `.env` avec votre éditeur et renseignez l'adresse IP de la base de données partagée fournie par l'enseignant (exemple : `192.168.1.100`) :
+Ouvrez le fichier `.env` avec votre éditeur et renseignez l'adresse IP de la base de données partagée fournie par les enseignants (exemple : `192.168.1.100`) :
 
 ```env
 DATABASE_HOST=192.168.1.100
@@ -100,7 +95,7 @@ POSTGRES_TEST_DB=les_bons_comptes_test
   docker compose up -d web
   ```
 
-- **Si vous travaillez en solo chez vous (hors de la salle de TP)** :  
+- **Si vous travaillez hors de la salle de TP** :  
   Démarrez l'ensemble des services (base locale + application) :
   ```bash
   docker compose up -d
@@ -131,7 +126,7 @@ Vous devriez voir :
 
 ### Comment peut-on partager une seule base de données sans se marcher sur les pieds ?
 
-Une question légitime se pose : *si 30 étudiants exécutent des tests en même temps sur la même base de données, ne risque-t-on pas d'écraser les données des autres ?*
+Une question légitime se pose : *si tout le monde lancent les tests en même temps sur la même base de données, ne risque-t-on pas d'écraser les données des autres ?*
 
 La réponse repose sur deux mécanismes élégants d'Elixir et PostgreSQL :
 
@@ -143,9 +138,7 @@ La réponse repose sur deux mécanismes élégants d'Elixir et PostgreSQL :
 
 ---
 
-## 4. Elixir & Phoenix en 5 minutes (Cheat-Sheet Débutant)
-
-Pas de panique si vous découvrez le langage ! Voici les 5 concepts clés dont vous aurez besoin aujourd'hui :
+## 4. Elixir & Phoenix Cheat-Sheet Débutant
 
 ### 1. L'Opérateur Pipe (`|>`)
 Il prend le résultat de l'expression de gauche et le passe comme **premier argument** de la fonction de droite.
@@ -270,7 +263,8 @@ Exécutez à nouveau les tests :
 ```bash
 docker compose exec web mix test test/les_bons_comptes/tp_expenses_test.exs
 ```
-*Le test de l'étape 2 doit maintenant être vert ! 🎉*
+
+**Le test échoue et c'est tout à fait normal ! Le code de validation n'existe pas encore. Nous allons l'implémenter à l'étape suivante pour le faire passer au vert.**
 
 ---
 
@@ -332,7 +326,7 @@ Décommentez et complétez les validations dans le pipe :
    |> validate_not_in_future()
    ```
 
-Relancez les tests : **le test 3.1 et le test 3.2 passent désormais !**
+Relancez les tests : **Le test de la partie précédente, le test 3.1 et le test 3.2 passent désormais !**
 
 ---
 
@@ -369,14 +363,6 @@ Remplacez le corps de la fonction par :
 1. L'appel à la fonction existante `list_expenses_for_wallet(wallet_id)` qui récupère toutes les dépenses du portefeuille triées par date décroissante.
 2. Le découpage en pages grâce au module utilitaire [`LesBonsComptes.Pagination.paginate/3`](file:///Users/mateodacosta/Fac/IF/IF/les_bons_comptes/lib/les_bons_comptes/pagination.ex) :
 
-```elixir
-def list_expenses_for_wallet_paginated(wallet_id, page \\ 1, page_size \\ 8)
-    when is_integer(wallet_id) or is_binary(wallet_id) do
-  list_expenses_for_wallet(wallet_id)
-  |> LesBonsComptes.Pagination.paginate(page, page_size)
-end
-```
-
 Relancez les tests : **le test 3.3 est vert !**
 
 ---
@@ -397,23 +383,6 @@ Une dépense ne peut être supprimée que si :
 
 #### Votre mission :
 Remplacez le `raise` par la structure conditionnelle `cond do ... end` :
-
-```elixir
-def delete_expense(%User{} = user, %Expense{} = expense) do
-  expense = Repo.preload(expense, [:wallet, :payer])
-
-  cond do
-    expense.wallet && expense.wallet.status != "open" ->
-      {:error, :wallet_closed}
-
-    can_delete_expense?(user, expense) ->
-      Repo.delete(expense)
-
-    true ->
-      {:error, :unauthorized}
-  end
-end
-```
 
 Relancez vos tests :
 ```bash
@@ -445,37 +414,3 @@ Il est temps de contempler votre travail dans une interface utilisateur réelle 
 
 ---
 
-## 9. Plan d'action pour l'enseignant / encadrant
-
-Pour organiser ce TP dans des conditions optimales, suivez cette feuille de route :
-
-### 1. Avant la séance (J-1)
-- [ ] **Déployer la base de données PostgreSQL partagée** sur une machine accessible sur le réseau local (ou un serveur dédié).
-- [ ] Initialiser le schéma et exécuter les migrations :
-  ```bash
-  MIX_ENV=dev mix ecto.setup
-  MIX_ENV=test mix ecto.create && MIX_ENV=test mix ecto.migrate
-  ```
-- [ ] Insérer les données de démonstration (seed) :
-  ```bash
-  mix run priv/repo/seeds.exs
-  ```
-- [ ] Vérifier que le port `5432` est ouvert et joignable depuis les adresses IP des étudiants (pare-feu / firewall).
-- [ ] Noter l'adresse IP locale du serveur PostgreSQL (ex: `192.168.1.100`) pour la projeter au tableau.
-
-### 2. Au début du TP (00h00 - 00h20)
-- [ ] **Présentation (10 min)** : Montrer l'application finale en démonstration vidéo ou live. Expliquer le concept de l'opérateur pipe (`|>`), des changesets et de LiveView.
-- [ ] **Mise en route (10 min)** :
-  - Les étudiants clonent le dépôt et basculent sur `feature/tp-if`.
-  - Ils copient `.env.example` en `.env` avec l'adresse IP de la base partagée.
-  - Ils lancent `docker compose up -d` et exécutent la première commande de test.
-
-### 3. Déroulé chronologique du TP (00h20 - 01h50)
-- **00h20 - 00h40 (20 min)** : Étape 1 & Étape 2. Comprendre le premier test et écrire son propre test sur le montant invalide.
-- **00h40 - 01h15 (35 min)** : Étape 3.1 & 3.2. Coder les validations dans `Expense.changeset/2` et faire passer la création.
-- **01h15 - 01h35 (20 min)** : Étape 3.3. Coder la pagination `list_expenses_for_wallet_paginated/3`.
-- **01h35 - 01h50 (15 min)** : Étape 3.4. Coder la suppression sécurisée `delete_expense/2`.
-
-### 4. Conclusion & Débriefing (01h50 - 02h00)
-- [ ] Faire tester le rendu visuel dans le navigateur à toute la classe.
-- [ ] Synthèse : résumer pourquoi le modèle d'acteurs de la machine virtuelle BEAM (Erlang) et l'immutabilité rendent Elixir et Phoenix LiveView si adaptés pour des applications temps réel et scalables.
