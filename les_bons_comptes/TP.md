@@ -90,21 +90,27 @@ POSTGRES_TEST_DB=les_bons_comptes_test
 ### 2.4 Démarrer le conteneur applicatif
 
 - **Pendant le TP (connexion à la base de données partagée)** :  
-  Démarrez uniquement le service web (sans lancer de base PostgreSQL locale inutile) :
+  Construisez et démarrez uniquement le service web (l'option `--no-deps` évite de démarrer la base PostgreSQL locale inutile, et `--build` garantit que l'image intègre tous les outils nécessaires comme `cmake`) :
   ```bash
-  docker compose up -d web
+  docker compose up -d --build --no-deps web
   ```
 
-- **Si vous travaillez hors de la salle de TP** :  
+- **Si vous travaillez hors de la salle de TP (base locale)** :  
   Démarrez l'ensemble des services (base locale + application) :
   ```bash
-  docker compose up -d
+  docker compose up -d --build
   ```
 
-Pour vérifier que votre conteneur tourne correctement :
+Pour vérifier que vos conteneurs tournent correctement :
 ```bash
 docker compose ps
 ```
+
+> **Astuce dépannage (Mac Apple Silicon / Erreur de compilation native)** :  
+> Si vous obtenez une erreur de compilation sur une dépendance native (comme `lazy_html`), nettoyez son cache puis relancez le test :
+> ```bash
+> docker compose exec web mix deps.clean lazy_html
+> ```
 
 ---
 

@@ -1,7 +1,7 @@
 FROM elixir:1.17-alpine
 
 # Installer les dépendances système nécessaires (compilateurs, PostgreSQL client, watcher inotify)
-RUN apk add --no-cache build-base inotify-tools postgresql-client git
+RUN apk add --no-cache build-base cmake inotify-tools postgresql-client git
 
 WORKDIR /app
 
